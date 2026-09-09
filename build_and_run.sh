@@ -1,0 +1,52 @@
+#!/bin/bash
+# usage: ./build_and_run.sh build|test|lint|clean [unit|full]
+# AGENTS.md 6장 빌드 디스패처 — MacJupJup Android
+set -e
+CMD="${1:-build}"
+SCOPE="${2:-unit}"
+PKG="com.borasarang.macjupjup"
+
+if [ -d "/Applications/Android Studio.app/Contents/jbr/Contents/Home" ]; then
+    export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+elif [ -z "$JAVA_HOME" ]; then
+    export JAVA_HOME=$(/usr/libexec/java_home 2>/dev/null || true)
+fi
+
+case "$CMD" in
+  build)
+    echo "🔨 assembleDebug 빌드 중…"
+    ./gradlew assembleDebug 2>&1 | tail -5
+    APK=$(find app/build/outputs/apk/debug -name "*.apk" | head -1)
+    if [ -z "$APK" ]; then
+        echo "❌ APK 생성 실패"; exit 1
+    fi
+    echo "✅ 빌드 완료: $APK"
+    DEVICE=$(adb devices 2>/dev/null | grep -w device | awk '{print $1}' | head -1)
+    if [ -z "$DEVICE" ]; then
+        echo "⚠️  디바이스 연결 없음 (설치 생략)"
+    else
+        echo "📲 $DEVICE에 설치 중…"
+        adb install -r "$APK" 2>&1 | tail -1
+    fi
+    ;;
+  test)
+    if [ "$SCOPE" = "full" ]; then
+        echo "🧪 전체 테스트 (unit + connected)…"
+        ./gradlew test connectedAndroidTest 2>&1 | tail -8
+    else
+        echo "🧪 단위 테스트…"
+        ./gradlew testDebugUnitTest 2>&1 | tail -8
+    fi
+    ;;
+  lint)
+    ./gradlew lintDebug 2>&1 | tail -8
+    ;;
+  clean)
+    ./gradlew clean
+    echo "🧹 클린 완료"
+    ;;
+  *)
+    echo "usage: ./build_and_run.sh build|test [unit|full]|lint|clean"
+    exit 1
+    ;;
+esac

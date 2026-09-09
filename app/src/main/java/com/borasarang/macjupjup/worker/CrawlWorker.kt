@@ -1,0 +1,220 @@
+package com.borasarang.macjupjup.worker
+
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.content.Context
+import android.content.pm.ServiceInfo
+import androidx.core.app.NotificationCompat
+import androidx.work.CoroutineWorker
+import androidx.work.ForegroundInfo
+import androidx.work.WorkerParameters
+import com.borasarang.macjupjup.MacJupJupApplication
+import com.borasarang.macjupjup.R
+import com.borasarang.macjupjup.crawler.CrawlerFactory
+import com.borasarang.macjupjup.util.Constants
+import com.borasarang.macjupjup.util.DebugLogger
+import com.borasarang.macjupjup.util.NetUtils
+
+/**
+ * 소스 1건 수집 워커. 장시간 실행 대비 setForeground 사용.
+ * 성공/실패 모두 crawl_logs 기록 + 소스 상태 갱신. 실패는 Result.retry.
+ * 알림 생성은 M5 (NotificationService 연동 시).
+ */
+class CrawlWorker(
+    context: Context,
+    params: WorkerParameters,
+) : CoroutineWorker(context, params) {
+
+    override suspend fun doWork(): Result {
+        val sourceId = inputData.getString(KEY_SOURCE_ID)
+        if (sourceId.isNullOrBlank()) {
+            return Result.failure()
+        }
+        val app = applicationContext as MacJupJupApplication
+        val source = app.sourceRepository.getById(sourceId)
+        if (source == null) {
+            DebugLogger.e("수집", "E-AND-CRAWL-0201", "소스 없음 id=$sourceId")
+            return Result.failure()
+        }
+        if (!source.enabled) {
+            return Result.success()
+        }
+        if (!NetUtils.isConnected(applicationContext)) {
+            DebugLogger.w("수집", "네트워크 끊김 — 연기 source=${source.name} (E-AND-NET-0301)")
+            return Result.retry()
+        }
+
+        DebugLogger.i("수집", "워커 시작 source=${source.name}")
+        app.sourceRepository.markRunning(sourceId)
+        setForeground(createForegroundInfo(source.name))
+        val startedAt = System.currentTimeMillis()
+
+        return try {
+            val token = app.preferences.getSettings().githubToken
+            val crawler = CrawlerFactory(app.database, token).create(source)
+            val outcome = crawler.crawl()
+            outcome.fold(
+                onSuccess = { drafts ->
+                    val apps = drafts.map { it.app }
+                    val mappings = drafts.flatMap { it.mappings }
+                    val saved = app.appRepository.saveApps(apps, mappings)
+                    app.sourceRepository.logResult(
+                        sourceId = sourceId,
+                        sourceName = source.name,
+                        startedAt = startedAt,
+                        status = Constants.STATUS_SUCCESS,
+                        found = drafts.size,
+                        created = saved.created,
+                        updated = saved.updated,
+                        error = null,
+                    )
+                    DebugLogger.i(
+                        "수집",
+                        "워커 완료 source=${source.name} found=${drafts.size} " +
+                            "new=${saved.created} updated=${saved.updated}",
+                    )
+                    // 알림 생성 — 저장된 id 기준 실제 조회
+                    val newApps = if (saved.createdIds.isEmpty()) {
+                        emptyList()
+                    } else {
+                        saved.createdIds.mapNotNull { app.database.appDao().getById(it) }
+                    }
+                    if (newApps.isNotEmpty()) {
+                        app.notificationService.createNewAppsNotification(newApps)
+                    }
+                    // 한글 번역은 TranslateWorker(별도 주기)가 담당 — 수집 경로 차단 금지
+                    app.notificationService.createCrawlCompleteNotification(
+                        com.borasarang.macjupjup.data.repository.CrawlResult(
+                            sourceName = source.name,
+                            found = drafts.size,
+                            created = saved.created,
+                            updated = saved.updated,
+                            startedAt = startedAt,
+                        ),
+                        newApps,
+                    )
+                    Result.success()
+                },
+                onFailure = { e ->
+                    fail(app, sourceId, source.name, startedAt, e.message ?: e.javaClass.simpleName)
+                    Result.retry()
+                },
+            )
+        } catch (e: Exception) {
+            fail(app, sourceId, source.name, startedAt, e.message ?: e.javaClass.simpleName)
+            Result.retry()
+        }
+    }
+
+    /**
+     * 한글 번역 (ML Kit 온디바이스). 신규·갱신 draft만, 실행당 최대 15건.
+     * 설정 꺼짐·모델 없음·실패 시 조용히 스킵 (수집 성공에 영향 없음).
+     * 참고: 현재 TranslateWorker(별도 주기)가 담당 — 본 함수는 미사용, 하위 호환 유지.
+     */
+    @Suppress("unused")
+    private suspend fun translateNewOrUpdated(
+        app: MacJupJupApplication,
+        apps: List<com.borasarang.macjupjup.data.db.entity.App>,
+    ) {
+        try {
+            if (!app.preferences.getSettings().translateKo) return
+            val targets = apps.filter { a ->
+                (a.descriptionSnippet != null && a.descriptionKo == null) ||
+                    (a.releaseNotes != null && a.releaseNotesKo == null)
+            }.take(MAX_TRANSLATE_PER_RUN)
+            if (targets.isEmpty()) return
+            var done = 0
+            for (a in targets) {
+                val current = app.database.appDao().getById(a.id) ?: continue
+                val descKo = current.descriptionSnippet
+                    ?.takeIf { current.descriptionKo == null }
+                    ?.let { com.borasarang.macjupjup.util.MacTranslator.translateEnToKo(it) }
+                val notesKo = (current.releaseNotes ?: current.releaseNotesSummary)
+                    ?.takeIf { current.releaseNotesKo == null }
+                    ?.let { com.borasarang.macjupjup.util.MacTranslator.translateEnToKo(it) }
+                if (descKo != null || notesKo != null) {
+                    app.database.appDao().updateKo(a.id, descKo, notesKo)
+                    done++
+                }
+            }
+            DebugLogger.i("번역", "한글 번역 완료 $done/${targets.size}건")
+        } catch (e: Exception) {
+            DebugLogger.w("번역", "번역 스킵: ${e.message}")
+        }
+    }
+
+    private suspend fun fail(
+        app: MacJupJupApplication,
+        sourceId: String,
+        sourceName: String,
+        startedAt: Long,
+        message: String,
+    ) {
+        app.sourceRepository.logResult(
+            sourceId = sourceId,
+            sourceName = sourceName,
+            startedAt = startedAt,
+            status = Constants.STATUS_FAILED,
+            found = 0,
+            created = 0,
+            updated = 0,
+            error = message,
+        )
+        DebugLogger.e("수집", "E-AND-CRAWL-0201", "워커 실패 source=$sourceName: $message")
+        checkFailureStreak(app, sourceId, sourceName, message)
+    }
+
+    /** 5연속 실패 시 DB 알림 저장 (E-AND-CRAWL-0204) */    private suspend fun checkFailureStreak(
+        app: MacJupJupApplication,
+        sourceId: String,
+        sourceName: String,
+        error: String,
+    ) {
+        try {
+            val statuses = app.sourceRepository.getRecentStatuses(sourceId, 5)
+            if (!com.borasarang.macjupjup.util.CrawlStats.isFailureStreak(statuses)) return
+            DebugLogger.e("수집", "E-AND-CRAWL-0204", "연속 5회 수집 실패 source=$sourceName")
+            app.notificationService.createFailureNotification(sourceName, error, 5)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun createForegroundInfo(sourceName: String): ForegroundInfo {
+        ensureChannel()
+        val notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
+            .setContentTitle(applicationContext.getString(R.string.notif_crawl_running))
+            .setContentText(sourceName)
+            .setSmallIcon(android.R.drawable.stat_sys_download)
+            .setOngoing(true)
+            .build()
+        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            ForegroundInfo(
+                Constants.NOTIFICATION_ID_CRAWL_BASE + sourceName.hashCode() % 100,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
+            )
+        } else {
+            ForegroundInfo(
+                Constants.NOTIFICATION_ID_CRAWL_BASE + sourceName.hashCode() % 100,
+                notification,
+            )
+        }
+    }
+
+    private fun ensureChannel() {
+        try {
+            val nm = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            nm.createNotificationChannel(
+                NotificationChannel(CHANNEL_ID, CHANNEL_NAME, NotificationManager.IMPORTANCE_LOW),
+            )
+        } catch (_: Exception) {
+        }
+    }
+
+    companion object {
+        const val KEY_SOURCE_ID = "sourceId"
+        private const val MAX_TRANSLATE_PER_RUN = 15
+        private const val CHANNEL_ID = "macjupjup_crawl"
+        private const val CHANNEL_NAME = "맥 앱 수집 상태"
+    }
+}

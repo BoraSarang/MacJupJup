@@ -1,0 +1,159 @@
+package com.borasarang.macjupjup.crawler.github
+
+import com.borasarang.macjupjup.crawler.AppDraft
+import com.borasarang.macjupjup.crawler.BaseCrawler
+import com.borasarang.macjupjup.data.db.entity.CrawlSource
+import com.borasarang.macjupjup.util.DebugLogger
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import java.net.URLEncoder
+import java.time.Instant
+
+/** JsonObject 안전 추출 헬퍼 (키 없음·JsonNull → null) */
+internal fun JsonObject.str(key: String): String? {
+    val el = get(key) ?: return null
+    if (el is JsonNull) return null
+    return try {
+        el.jsonPrimitive.content
+    } catch (_: Exception) {
+        null
+    }
+}
+
+internal fun JsonObject.int(key: String): Int? = str(key)?.toIntOrNull()
+
+internal fun JsonObject.dbl(key: String): Double? = str(key)?.toDoubleOrNull()
+
+/**
+ * GitHub 신규·갱신 저장소 발굴.
+ * 쿼리: topic:macos / topic:mac-app / topic:menu-bar, sort=updated (신규·갱신 포착 우선).
+ * 인증 시 분당 30회·시간당 5000회. 미인증도 3회 호출이라 동작은 하나 토큰 권장.
+ */
+class GitHubSearchCrawler(
+    source: CrawlSource,
+    private val token: String = "",
+    private val queries: List<String> = DEFAULT_QUERIES,
+    /** 실행당 README 보강 상한 (레이트 절약, stars 순) */
+    private val readmeLimit: Int = 10,
+) : BaseCrawler(source) {
+
+    override suspend fun crawl(): Result<List<AppDraft>> = runCatching {
+        val headers = buildMap {
+            put("Accept", "application/vnd.github+json")
+            put("X-GitHub-Api-Version", "2022-11-28")
+            if (token.isNotBlank()) put("Authorization", "Bearer $token")
+        }
+        val drafts = mutableListOf<AppDraft>()
+        for (q in queries) {
+            val url = "https://api.github.com/search/repositories" +
+                "?q=${URLEncoder.encode(q, "UTF-8")}&sort=updated&order=desc&per_page=$PER_PAGE&page=1"
+            val body = fetchGetHeaders(url, headers)
+            drafts += parseRepos(body)
+            politenessDelay()
+        }
+        // 동일 repo 중복 제거 (쿼리 간 겹침)
+        val seen = mutableSetOf<String>()
+        val unique = drafts.filter { d ->
+            seen.add(d.app.repoFullName ?: d.app.id)
+        }
+        DebugLogger.i("수집", "GitHub Search 완료 queries=${queries.size} found=${drafts.size} unique=${unique.size}")
+        // README 보강: stars 상위만 (API 절약)
+        val withReadme = unique.sortedByDescending { it.app.stars ?: 0 }.take(readmeLimit)
+        val readmeMap = mutableMapOf<String, String>()
+        for (d in withReadme) {
+            val repo = d.app.repoFullName ?: continue
+            try {
+                val raw = fetchGetHeaders(
+                    "https://api.github.com/repos/$repo/readme",
+                    headers + ("Accept" to "application/vnd.github.raw"),
+                )
+                cleanReadme(raw)?.let { readmeMap[repo] = it }
+            } catch (e: Exception) {
+                DebugLogger.d("수집", "README 스킵 $repo: ${e.message}")
+            }
+            politenessDelay()
+        }
+        if (readmeMap.isEmpty()) return@runCatching unique
+        return@runCatching unique.map { d ->
+            val repo = d.app.repoFullName
+            val readme = repo?.let { readmeMap[it] } ?: return@map d
+            val merged = if (d.app.descriptionSnippet.isNullOrBlank()) readme
+            else d.app.descriptionSnippet + "\n\n— README —\n" + readme
+            d.copy(app = d.app.copy(descriptionSnippet = merged.take(2000)))
+        }
+    }
+
+    /** README raw → 노이즈 제거 + 2000자 절단. null이면 스킵 */
+    internal fun cleanReadme(raw: String): String? {
+        if (raw.isBlank()) return null
+        var t = raw
+        t = t.replace(Regex("(?m)^#{1,6}\\s*"), "")
+        t = t.replace(Regex("[`*_]{1,3}"), "")
+        t = t.replace(Regex("!?\\[([^\\]]*)\\]\\([^)]*\\)"), "$1")
+        t = t.replace(Regex("(?m)^\\s*[-*+]\\s+"), "· ")
+        t = t.replace(Regex("[ \\t]+"), " ")
+        t = t.replace(Regex("\\n{3,}"), "\n\n")
+        t = t.trim().take(2000)
+        return t.ifBlank { null }
+    }
+
+    internal fun parseRepos(body: String): List<AppDraft> {
+        val items = try {
+            Json.parseToJsonElement(body).jsonObject["items"]?.jsonArray ?: return emptyList()
+        } catch (_: Exception) {
+            throw IllegalStateException("GitHub Search 응답 파싱 실패 (E-AND-CRAWL-0201)")
+        }
+        return items.mapNotNull { el ->
+            try {
+                val o = el.jsonObject
+                val fullName = o.str("full_name") ?: return@mapNotNull null
+                val owner = o.jsonObject["owner"]?.jsonObject?.str("login") ?: ""
+                val name = o.str("name") ?: return@mapNotNull null
+                val topics = o["topics"]?.jsonArray?.mapNotNull {
+                    if (it is JsonNull) null else it.jsonPrimitive.content
+                } ?: emptyList()
+                val licenseName = o.jsonObject["license"]?.jsonObject?.str("spdx_id")
+                    ?.takeIf { it != "NOASSERTION" }
+                val avatar = o.jsonObject["owner"]?.jsonObject?.str("avatar_url")
+                buildDraft(
+                    name = name,
+                    developer = owner.ifBlank { fullName.substringBefore("/") },
+                    repoFullName = fullName,
+                    homepageUrl = o.str("homepage")?.takeIf { it.isNotBlank() },
+                    version = o.str("default_branch")?.let { "$it 최신" },
+                    descriptionSnippet = o.str("description"),
+                    stars = o.int("stargazers_count"),
+                    primaryLanguage = o.str("language"),
+                    topics = topics,
+                    iconUrl = avatar,
+                    forks = o.int("forks_count"),
+                    issues = o.int("open_issues_count"),
+                    licenseName = licenseName,
+                    detailUrl = o.str("html_url") ?: "https://github.com/$fullName",
+                    releaseDate = o.str("pushed_at")?.let { parseEpoch(it) },
+                )
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
+
+    companion object {
+        const val PER_PAGE = 30
+        val DEFAULT_QUERIES = listOf(
+            "topic:macos stars:>20",
+            "topic:mac-app",
+            "topic:menu-bar",
+        )
+
+        fun parseEpoch(iso: String): Long? = try {
+            Instant.parse(iso).toEpochMilli()
+        } catch (_: Exception) {
+            null
+        }
+    }
+}
