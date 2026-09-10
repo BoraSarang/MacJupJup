@@ -2,6 +2,27 @@
 
 > 형식: `## [vX.Y.Z] - YYYY-MM-DD` · platform 태그 + error_code + perf/cache 영향 기록
 
+## [v2.3] - 2026-09-10
+
+- 수집(AND): PH·HN·MMB 3종 제거 (버전 추적 불가) — 시드·팩토리·상수·크롤러·파서 테스트 삭제, 시작 시 purge+예약 취소
+- 포털(AND): HTML 잔재 제거 — 상세·히스토리 전체 stripHtml, `a < b` 평문 보존 (신규 error_code 없음)
+- 수집(AND): GitHub 릴리즈노트 살균 (`cleanNotes`, 마크다운 유지)
+- 단위 57/57 · lint Error 0 · node 렌더 검증 (외래 태그 0건)
+
+## [v2.2] - 2026-09-10
+
+- 번역(AND): 처리율 상향 — 주기 6h→3h·회당 30→100건 (800건/일, 적체 3475건 약 4일) + 기존 설치분 REPLACE 교체
+- 포털(AND): 헤더 🌐 번역 버튼 — `POST /api/translate` 수동 즉시 실행 (적체 해소용)
+- 단위 61/61 · lint Error 0 · 배터리 영향: 하루 최대 8회×100건 (제약: 네트워크 연결+배터리 정상 시만)
+
+## [v2.1] - 2026-09-10
+
+- 포털(AND): 소개 원문보기 토글 수정 — `data-kotext` 누락으로 무반응이던 버그, 발췌↔발췌 전문 토글로 일관화
+- 번역(AND): 줄 단위 분할 번역으로 개행 보존 (Time Timer 한 줄 표시 대응) + 개행 소실 행 자동 재번역
+- Watchlist(AND): 탭 분리 — 업데이트(실제 bump, `prevVersion` 있음, 기본) / 전체 버전앱 + 문구 정정
+- 버전(AND): `JsonSafe.str` trim + `MergeUtils.sameVersion` 단일 진실 — 공백 차이 오판 방지 (신규 error_code 없음)
+- 단위 56/56 · lint Error 0 · perf/cache 영향 없음 (번역 호출은 여러 줄 앱에 한해 증가)
+
 ## [v2.0] - 2026-09-10
 
 - 서버: JSON 헬퍼(receive/pathId/putIfNotNull) 전 라우트 적용 + seed 백그라운드·상태 API
