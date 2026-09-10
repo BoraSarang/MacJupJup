@@ -27,26 +27,20 @@ object Constants {
     const val NOTIFICATION_ID_CRAWL_BASE = 1100
     const val CHANNEL_ID_SERVER = "macjupjup_server"
 
-    // 소스 ID (InitialDataSeeder와 일치)
+    // 소스 ID (InitialDataSeeder와 일치, PH·HN·MMB 제거됨)
     const val SOURCE_GITHUB_SEARCH = "github_search"
     const val SOURCE_GITHUB_RELEASES = "github_releases"
-    const val SOURCE_PRODUCTHUNT = "producthunt"
-    const val SOURCE_HN_SHOW = "hn_show"
     const val SOURCE_CHART_RSS = "chart_rss"
     const val SOURCE_ITUNES_LOOKUP = "itunes_lookup"
     const val SOURCE_NAME_MATCH = "name_match"
-    const val SOURCE_MACMENUBAR = "macmenubar"
     const val SOURCE_MAS_DISCOVERY = "mas_discovery"
 
     // 소스 타입
     const val TYPE_GITHUB_SEARCH = "GITHUB_SEARCH"
     const val TYPE_GITHUB_RELEASES = "GITHUB_RELEASES"
-    const val TYPE_PH_FEED = "PH_FEED"
-    const val TYPE_HN_SHOW = "HN_SHOW"
     const val TYPE_CHART_RSS = "CHART_RSS"
     const val TYPE_ITUNES_LOOKUP = "ITUNES_LOOKUP"
     const val TYPE_NAME_MATCH = "NAME_MATCH"
-    const val TYPE_MACMENUBAR = "MACMENUBAR"
     const val TYPE_MAS_DISCOVERY = "MAS_DISCOVERY"
 
     // 수집 상태

@@ -33,6 +33,7 @@ interface AppDao {
           AND (:tag IS NULL OR tags LIKE '%' || :tag || '%')
           AND (:q IS NULL OR name LIKE '%' || :q || '%' OR developer LIKE '%' || :q || '%')
           AND (:bumped = 0 OR (isNew = 0 AND version IS NOT NULL))
+          AND (:updatedOnly = 0 OR prevVersion IS NOT NULL)
         ORDER BY
           CASE WHEN :sort = 'stars' THEN stars END DESC,
           CASE WHEN :sort = 'rating' THEN averageRating END DESC,
@@ -49,6 +50,7 @@ interface AppDao {
         limit: Int,
         offset: Int,
         bumped: Boolean = false,
+        updatedOnly: Boolean = false,
     ): List<App>
 
     @Query(
@@ -57,7 +59,8 @@ interface AppDao {
           AND (:category IS NULL OR category = :category)
           AND (:tag IS NULL OR tags LIKE '%' || :tag || '%')
           AND (:q IS NULL OR name LIKE '%' || :q || '%' OR developer LIKE '%' || :q || '%')
-          AND (:bumped = 0 OR (isNew = 0 AND version IS NOT NULL))"""
+          AND (:bumped = 0 OR (isNew = 0 AND version IS NOT NULL))
+          AND (:updatedOnly = 0 OR prevVersion IS NOT NULL)"""
     )
     suspend fun countFiltered(
         license: String?,
@@ -65,6 +68,7 @@ interface AppDao {
         tag: String?,
         q: String?,
         bumped: Boolean = false,
+        updatedOnly: Boolean = false,
     ): Int
 
     @Query("SELECT * FROM apps WHERE trackId = :trackId LIMIT 1")
@@ -103,6 +107,8 @@ interface AppDao {
         """SELECT * FROM apps
         WHERE (descriptionKo IS NULL AND descriptionSnippet IS NOT NULL)
            OR (releaseNotesKo IS NULL AND releaseNotes IS NOT NULL)
+           OR (descriptionSnippet LIKE '%' || char(10) || '%'
+               AND (descriptionKo IS NULL OR descriptionKo NOT LIKE '%' || char(10) || '%'))
         ORDER BY lastUpdatedAt DESC LIMIT :limit"""
     )
     suspend fun getUntranslated(limit: Int): List<App>
@@ -114,11 +120,13 @@ interface AppDao {
     )
     suspend fun updateKo(id: String, descKo: String?, notesKo: String?)
 
-    /** 미번역 행 수 (인사이트 번역 커버리지용) */
+    /** 미번역 행 수 (인사이트 번역 커버리지용, T-131 개행 복구분 포함) */
     @Query(
         """SELECT COUNT(*) FROM apps
         WHERE (descriptionKo IS NULL AND descriptionSnippet IS NOT NULL)
-           OR (releaseNotesKo IS NULL AND releaseNotes IS NOT NULL)"""
+           OR (releaseNotesKo IS NULL AND releaseNotes IS NOT NULL)
+           OR (descriptionSnippet LIKE '%' || char(10) || '%'
+               AND (descriptionKo IS NULL OR descriptionKo NOT LIKE '%' || char(10) || '%'))"""
     )
     suspend fun countUntranslated(): Int
 

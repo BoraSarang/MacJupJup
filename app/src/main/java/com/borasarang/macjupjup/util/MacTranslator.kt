@@ -79,10 +79,64 @@ object MacTranslator {
         return ok
     }
 
-    /** 어떤 언어든 → 한글. 자동 감지 + ML Kit 우선, gtx(sl=auto) 폴백 */
+    /** 어떤 언어든 → 한글. 자동 감지 + ML Kit 우선, gtx(sl=auto) 폴백.
+     *  T-131: 개행 보존 — 여러 줄이면 줄 단위로 나눠 번역 후 `\n` 결합.
+     *  T-141: 마크다운 보호 — 코드펜스 스킵 + 줄앞 마커 분리 + 링크 URL·인라인코드 미번역. */
     suspend fun translateAutoToKo(text: String): String? {
         val t = text.trim()
         if (t.isBlank() || !needsTranslation(t)) return null
+        if (!t.contains("\n")) return translateMdLine(t)
+        val lines = t.split("\n")
+        var inFence = false
+        var done = 0
+        val out = lines.toMutableList()
+        for ((i, rawLine) in lines.withIndex()) {
+            val trimmed = rawLine.trim()
+            if (trimmed.startsWith("```")) {
+                inFence = !inFence
+                continue
+            }
+            if (inFence || trimmed.isBlank() || isReadmeMarker(trimmed)) continue
+            if (!needsTranslation(rawLine)) continue
+            val tr = translateMdLine(rawLine)
+            if (tr != null && tr != rawLine.trim()) {
+                val (marker, _) = stripLeadingMarker(rawLine)
+                out[i] = marker + tr
+                done++
+            }
+            kotlinx.coroutines.delay(200)
+        }
+        DebugLogger.i("번역", "[FEATURE] 마크다운 줄단위 번역 ${lines.size}줄 중 ${done}줄")
+        if (done == 0) return null
+        return out.joinToString("\n").trim().ifBlank { null }
+    }
+
+    /** 마크다운 한 줄 번역: 앞마커 분리 → 본문 조각별 번역 → 재결합 */
+    private suspend fun translateMdLine(rawLine: String): String? {
+        val (marker, body) = stripLeadingMarker(rawLine)
+        if (body.isBlank() || !needsTranslation(body)) return null
+        val sb = StringBuilder()
+        var changed = false
+        for ((translatable, seg) in splitMdLine(body)) {
+            if (!translatable || !needsTranslation(seg)) {
+                sb.append(seg)
+                continue
+            }
+            val tr = translateOneBlock(seg.trim())
+            if (tr != null) {
+                sb.append(tr)
+                changed = true
+            } else {
+                sb.append(seg)
+            }
+            kotlinx.coroutines.delay(200)
+        }
+        if (!changed) return null
+        return marker + sb.toString()
+    }
+
+    /** 단일 블록(개행 없음) 번역 본체 */
+    private suspend fun translateOneBlock(t: String): String? {
         val source = identifySource(t)
         if (source == TranslateLanguage.KOREAN) return null
         DebugLogger.i("번역", "[FEATURE] 자동번역 감지언어=$source ${t.take(40)}")
@@ -158,6 +212,68 @@ object MacTranslator {
         if (letters == 0) return false
         val ko = text.count { it in '가'..'힣' }
         return ko.toDouble() / letters <= 0.5
+    }
+
+    /** 포털 소개/상세 분리 마커줄 판정 (T-073 규격, 수집·웹과 동일 문자열) */
+    fun isReadmeMarker(line: String): Boolean {
+        return line.trim() == "— README —"
+    }
+
+    /** 줄 앞 마크다운 마커 분리 ("## Title" → "## " + "Title"). 마커는 번역 제외 */
+    internal fun stripLeadingMarker(line: String): Pair<String, String> {
+        val m = Regex("^(\\s*-\\s\\[[ xX]\\]\\s+|#{1,6}\\s+|>\\s?|\\s*(?:[-*+]|\\d+[.)])\\s+)").find(line)
+        return if (m != null) m.value to line.substring(m.value.length) else "" to line
+    }
+
+    /** 마크다운 본문을 번역가능/보존 조각으로 분할. true=번역 대상.
+     *  인라인코드(`code`)·대괄호·링크URL(`](url)`)은 보존, 링크 텍스트만 번역. */
+    internal fun splitMdLine(line: String): List<Pair<Boolean, String>> {
+        val out = mutableListOf<Pair<Boolean, String>>()
+        val buf = StringBuilder()
+        fun flushText() {
+            if (buf.isNotEmpty()) {
+                out += true to buf.toString()
+                buf.clear()
+            }
+        }
+        var i = 0
+        while (i < line.length) {
+            val c = line[i]
+            if (c == '`') {
+                val end = line.indexOf('`', i + 1)
+                flushText()
+                if (end < 0) {
+                    out += false to line.substring(i)
+                    break
+                }
+                out += false to line.substring(i, end + 1)
+                i = end + 1
+            } else if (c == '[') {
+                val close = line.indexOf(']', i + 1)
+                val hasParen = close + 1 < line.length && line[close + 1] == '('
+                val closeParen = if (hasParen) line.indexOf(')', close + 2) else -1
+                if (close > i + 1 && hasParen && closeParen > close) {
+                    var bang = ""
+                    if (buf.isNotEmpty() && buf.last() == '!') {
+                        buf.deleteCharAt(buf.length - 1)
+                        bang = "!"
+                    }
+                    flushText()
+                    out += false to (bang + "[")
+                    out += true to line.substring(i + 1, close)
+                    out += false to line.substring(close, closeParen + 1)
+                    i = closeParen + 1
+                } else {
+                    buf.append(c)
+                    i++
+                }
+            } else {
+                buf.append(c)
+                i++
+            }
+        }
+        flushText()
+        return out.filter { it.second.isNotEmpty() }
     }
 
     /** 한글 없음 + ASCII 문자 포함이면 영문으로 간주 (레거시, 호환 유지) */

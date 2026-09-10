@@ -10,7 +10,7 @@ import com.borasarang.macjupjup.util.MacTranslator
 /**
  * 한글 번역 전용 워커 (ML Kit 온디바이스).
  * 수집 워커와 분리 — 모델 다운로드(~30MB 1회) + 장시간 번역을 독립 생명주기로 처리.
- * 미번역 행을 최대 30건/실행씩 처리. 설정 꺼짐·실패 시 조용히 스킵.
+ * 미번역 행을 최대 100건/실행씩 처리 (T-150: 적체 해소용 상향). 설정 꺼짐·실패 시 조용히 스킵.
  */
 class TranslateWorker(
     context: Context,
@@ -35,8 +35,11 @@ class TranslateWorker(
                     DebugLogger.i("번역", "중단 요청 — 진행 $done/${targets.size}건 저장 후 종료")
                     break
                 }
+                // T-131: 미번역 + 개행 소실(원문 여러 줄·번역 한 줄) 복구 대상
+                val needsDescRepair = a.descriptionSnippet?.contains("\n") == true &&
+                    (a.descriptionKo == null || !a.descriptionKo.contains("\n"))
                 val descKo = a.descriptionSnippet
-                    ?.takeIf { a.descriptionKo == null }
+                    ?.takeIf { a.descriptionKo == null || needsDescRepair }
                     ?.let { MacTranslator.translateAutoToKo(it) }
                 val notesKo = (a.releaseNotes ?: a.releaseNotesSummary)
                     ?.takeIf { a.releaseNotesKo == null }
@@ -57,6 +60,6 @@ class TranslateWorker(
     }
 
     companion object {
-        const val MAX_PER_RUN = 30
+        const val MAX_PER_RUN = 100
     }
 }

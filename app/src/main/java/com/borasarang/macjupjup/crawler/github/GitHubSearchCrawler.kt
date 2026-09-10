@@ -70,14 +70,14 @@ class GitHubSearchCrawler(
         }
     }
 
-    /** README raw → 노이즈 제거 + 2000자 절단. null이면 스킵 */
+    /** README raw → 살균 + 2000자 절단. T-140: 마크다운 구조 보존 (포털 렌더용).
+     *  제거: raw HTML 태그(XSS·번역 오동작 원천 차단), HTML 주석, 과도 개행.
+     *  유지: 제목·굵게·코드·링크·목록·인용 (번역 단계에서 코드·URL은 미번역). */
     internal fun cleanReadme(raw: String): String? {
         if (raw.isBlank()) return null
         var t = raw
-        t = t.replace(Regex("(?m)^#{1,6}\\s*"), "")
-        t = t.replace(Regex("[`*_]{1,3}"), "")
-        t = t.replace(Regex("!?\\[([^\\]]*)\\]\\([^)]*\\)"), "$1")
-        t = t.replace(Regex("(?m)^\\s*[-*+]\\s+"), "· ")
+        t = t.replace(Regex("<!--[\\s\\S]*?-->"), "")
+        t = t.replace(Regex("<[^>\\n]+>"), "")
         t = t.replace(Regex("[ \\t]+"), " ")
         t = t.replace(Regex("\\n{3,}"), "\n\n")
         t = t.trim().take(2000)

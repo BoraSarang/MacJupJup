@@ -75,6 +75,21 @@ class GitHubParseTest {
     }
 
     @Test
+    fun `릴리즈노트_HTML살균_T143`() {
+        val crawler = GitHubReleasesCrawler(source, { emptyList() })
+        val cleaned = crawler.cleanNotes("## 변경\n\n<img src=\"x.png\">\n\n- <b>굵게</b> 수정\n\n<!-- hi -->\n\na < b 비교")
+        assertNotNull(cleaned)
+        assertTrue(!cleaned!!.contains("<img"))
+        assertTrue(!cleaned.contains("<b>"))
+        assertTrue(!cleaned.contains("<!--"))
+        assertTrue(cleaned.contains("## 변경"))
+        assertTrue(cleaned.contains("- 굵게 수정"))
+        assertTrue(cleaned.contains("a < b 비교"))
+        assertNull(crawler.cleanNotes("   "))
+        assertNull(crawler.cleanNotes(null))
+    }
+
+    @Test
     fun `epoch_파싱`() {
         assertTrue((GitHubSearchCrawler.parseEpoch("2026-09-01T00:00:00Z") ?: 0) > 0)
         assertNull(GitHubSearchCrawler.parseEpoch("bad-date"))

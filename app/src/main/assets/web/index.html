@@ -14,6 +14,7 @@
                 <button id="langToggle" class="btn-lang" type="button" title="한국어/원문 전환">한국어</button>
                 <span id="lastUpdated">마지막 업데이트: -</span>
                 <button id="totalCount" class="badge badge-sync" type="button" title="지금 수집하기">총 0개</button>
+                <button id="translateNow" class="badge" type="button" title="한글 번역 즉시 실행">🌐 번역</button>
                 <button id="notifBell" class="btn-notif" type="button" aria-label="알림 센터 열기">
                     <span aria-hidden="true">🔔</span>
                 </button>
@@ -64,7 +65,11 @@
         </section>
 
         <section class="watchlist-section" id="watchlistSection" hidden>
-            <h2>👁 버전 업데이트 <small>최근 버전 bump·보완된 앱</small></h2>
+            <h2>👁 Watchlist <small>버전 추적 앱</small></h2>
+            <div class="period-row" id="watchModeRow" aria-label="Watchlist 범위">
+                <button type="button" data-mode="updated" class="active">업데이트</button>
+                <button type="button" data-mode="settled">전체 버전앱</button>
+            </div>
             <div class="app-grid" id="watchGrid" role="list" aria-label="버전 업데이트 목록"></div>
             <nav class="pagination" id="watchPagination" aria-label="버전 목록 페이지네이션"></nav>
         </section>

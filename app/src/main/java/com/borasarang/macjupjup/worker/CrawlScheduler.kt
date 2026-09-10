@@ -112,18 +112,19 @@ class CrawlScheduler(private val context: Context) {
         DebugLogger.i("스케줄", "일일 요약 예약 24h 주기 (${delayMs / 3600000}시간 후 첫 실행)")
     }
 
-    /** 번역 워커 6시간 주기 예약 (수집과 독립 생명주기) */
+    /** 번역 워커 3시간 주기 예약 (T-150: 적체 해소용 단축, 수집과 독립 생명주기) */
     fun scheduleTranslate() {
-        val req = PeriodicWorkRequestBuilder<TranslateWorker>(6, TimeUnit.HOURS)
+        val req = PeriodicWorkRequestBuilder<TranslateWorker>(3, TimeUnit.HOURS)
             .setConstraints(constraints())
             .addTag(TAG_TRANSLATE)
             .build()
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(
             "translate_ko",
-            ExistingPeriodicWorkPolicy.KEEP,
+            // T-150: REPLACE — 기존 설치분의 6h 예약을 3h로 교체 (KEEP이면 구 주기 유지됨)
+            ExistingPeriodicWorkPolicy.REPLACE,
             req,
         )
-        DebugLogger.i("스케줄", "번역 워커 예약 6시간마다")
+        DebugLogger.i("스케줄", "번역 워커 예약 3시간마다")
     }
 
     /** 번역 즉시 실행 (포털·설정에서 수동) */

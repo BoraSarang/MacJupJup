@@ -16,4 +16,10 @@ object MergeUtils {
             .replace("[^a-z0-9가-힣]".toRegex(), "")
             .take(64)
     }
+
+    /** 버전 동등 판정 단일 진실 (T-132). 앞뒤 공백 차이("4.3.4 " vs "4.3.4")는 동일 버전. */
+    fun sameVersion(a: String?, b: String?): Boolean {
+        if (a == null || b == null) return a == b
+        return a.trim() == b.trim()
+    }
 }

@@ -50,6 +50,8 @@ data class AppFilter(
     val pageSize: Int = 50,
     /** true면 버전업(isNew=0 AND version 있음)만 */
     val bumped: Boolean = false,
+    /** true면 실제 버전 변경 증거(prevVersion 있음)만 — Watchlist 업데이트 탭 (T-132) */
+    val updatedOnly: Boolean = false,
 )
 
 data class PagedApps(

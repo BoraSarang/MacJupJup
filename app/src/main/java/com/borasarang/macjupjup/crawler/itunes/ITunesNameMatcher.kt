@@ -15,7 +15,7 @@ import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * iTunes 이름 대조 매칭 (US, 키 불필요, 주 1회).
- * trackId·repo가 없는 앱(Setapp·PH·HN)을 search로 대조해 trackId를 부여.
+ * trackId·repo가 없는 앱을 search로 대조해 trackId를 부여.
  * 엄격 규칙: 이름 정규화 완전일치 + 개발사명 포함 일치. 미달은 그대로 둠.
  * 매칭 후 다음 lookup 폴링부터 전체 상세 자동 보완.
  */
@@ -102,8 +102,8 @@ class ITunesNameMatcher(
         fun normalize(s: String): String =
             com.borasarang.macjupjup.util.MergeUtils.normalizeName(s)
 
-        /** 수집원 표기 개발사 (Setapp·HN·PH·MMB) — 실제 개발사 아님.
-         *  T-071: MacMenuBar도 수집원 표기로 취급 → 단일 후보 폴백·중복 병합 대상. */
+        /** 수집원 표기 개발사 — 실제 개발사 아님 (PH·HN·MMB 제거 후 잔재 행 매칭용으로 유지).
+         *  신규 수집은 6종이므로 해당 표기는 더 이상 생성되지 않음. */
         fun isPlaceholderDeveloper(developer: String): Boolean {
             val dev = normalize(developer)
             return dev == "setapp" || dev.startsWith("hn") || dev == "producthunt" ||

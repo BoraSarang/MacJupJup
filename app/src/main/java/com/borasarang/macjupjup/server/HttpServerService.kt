@@ -197,6 +197,7 @@ class HttpServerService : Service() {
                             ?.coerceIn(1, Constants.API_MAX_PAGE_SIZE)
                             ?: Constants.API_DEFAULT_PAGE_SIZE,
                         bumped = params["bumped"]?.toBooleanStrictOrNull() ?: false,
+                        updatedOnly = params["updatedOnly"]?.toBooleanStrictOrNull() ?: false,
                     )
                     val result = application.appRepository.list(filter)
                     call.respondText(

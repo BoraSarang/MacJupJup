@@ -84,9 +84,9 @@ class AppRepository(private val db: MacDatabase) {
             }
             val newHistories = mutableListOf<VersionHistory>()
             for (app in withVersion) {
-                val v = app.version ?: continue
+                val v = app.version?.trim() ?: continue
                 val latest = latestByApp[app.id]
-                if (latest == null || latest.version != v) {
+                if (latest == null || !com.borasarang.macjupjup.util.MergeUtils.sameVersion(latest.version, v)) {
                     if (latest != null) {
                         DebugLogger.i("버전추적", "버전 bump 감지: ${app.name} ${latest.version} → $v")
                     }
@@ -119,8 +119,9 @@ class AppRepository(private val db: MacDatabase) {
             limit = pageSize,
             offset = offset,
             bumped = filter.bumped,
+            updatedOnly = filter.updatedOnly,
         )
-        val total = db.appDao().countFiltered(filter.license, filter.category, filter.tag, q, filter.bumped)
+        val total = db.appDao().countFiltered(filter.license, filter.category, filter.tag, q, filter.bumped, filter.updatedOnly)
         // P1-1: 대표 매핑 일괄 조회 (행당 getByApp N+1 제거)
         val mapsByApp = if (apps.isEmpty()) {
             emptyMap()
@@ -226,8 +227,9 @@ class AppRepository(private val db: MacDatabase) {
      * firstSeenAt·isNew·수동 오버라이드는 기존 유지.
      */
     internal fun mergeApps(existing: App, draft: App): App {
+        // T-132: 공백 차이 버전 오판 방지 (정규화 비교)
         val versionChanged = draft.version != null && existing.version != null &&
-            draft.version != existing.version
+            !com.borasarang.macjupjup.util.MergeUtils.sameVersion(draft.version, existing.version)
         return draft.copy(
             firstSeenAt = existing.firstSeenAt,
             // isNew 정책: 버전 bump되면 정착 앱으로 간주, NEW 즉시 해제

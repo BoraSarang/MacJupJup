@@ -7,7 +7,7 @@
     var LICENSE_LABEL = { OSS: '오픈소스', FREE: '프리', PAID: '유료' };
     var PAGE_SIZE = 20;
 
-    var state = { view: 'timeline', license: '', tag: '', category: '', q: '', sort: 'newest', page: 1, lang: 'ko', collectDays: 14, collectSource: '' };
+    var state = { view: 'timeline', license: '', tag: '', category: '', q: '', sort: 'newest', page: 1, lang: 'ko', collectDays: 14, collectSource: '', watchMode: 'updated' };
 
     /* 현재 뷰 다시 로드 (공유 메뉴가 모든 뷰에서 동작하도록) */
     function reloadCurrentView() {
@@ -27,6 +27,124 @@
         return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
             return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
         });
+    }
+
+    /* ---------- 마크다운 (T-142: 보수적 렌더러) ----------
+     * XSS: escape 선행 + href https? 화이트리스트 + 수집 단계 raw HTML 제거.
+     * 평문 오렌더 방지: 단일 *·_ 강조 미지원, 이미지는 링크로 (임의 로드 차단). */
+    function mdInline(s) {
+        s = s.replace(/`([^`]+?)`/g, '<code>$1</code>');
+        s = s.replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>');
+        s = s.replace(/!\[([^\]]*?)\]\((https?:\/\/[^)\s]+?)\)/g, '<a target="_blank" rel="noopener" href="$2">🖼 $1</a>');
+        s = s.replace(/\[([^\]]+?)\]\((https?:\/\/[^)\s]+?)\)/g, '<a target="_blank" rel="noopener" href="$2">$1</a>');
+        return s;
+    }
+    /* HTML 잔재 제거 (T-143: 구 수집분·릴리즈노트의 날 태그가 소스로 보이는 문제).
+     * 진짜 태그만 제거: '<' 바로 뒤 영문(또는 '/'+영문). 'a < b' 같은 평문은 보존. */
+    function stripHtml(s) {
+        return String(s == null ? '' : s).replace(/<\/?[a-zA-Z][^>\n]*>/g, '');
+    }
+    function md(src) {
+        var lines = esc(stripHtml(src)).split('\n');
+        var html = '';
+        var inCode = false;
+        var codeBuf = [];
+        var listBuf = [];
+        var listTag = '';
+        function flushList() {
+            if (listBuf.length) {
+                html += '<' + listTag + '>' + listBuf.join('') + '</' + listTag + '>';
+                listBuf = [];
+                listTag = '';
+            }
+        }
+        lines.forEach(function (raw) {
+            var line = raw.trim();
+            if (/^```/.test(line)) {
+                flushList();
+                if (inCode) {
+                    html += '<pre><code>' + codeBuf.join('\n') + '</code></pre>';
+                    codeBuf = [];
+                }
+                inCode = !inCode;
+                return;
+            }
+            if (inCode) {
+                codeBuf.push(raw.replace(/^\s+|\s+$/g, ''));
+                return;
+            }
+            if (!line) {
+                flushList();
+                return;
+            }
+            var h = line.match(/^(#{1,6})\s+(.*)$/);
+            if (h) {
+                flushList();
+                html += h[1].length <= 2 ? '<h4>' + mdInline(h[2]) + '</h4>' : '<h5>' + mdInline(h[2]) + '</h5>';
+                return;
+            }
+            if (/^(---|\*\*\*|___)\s*$/.test(line)) {
+                flushList();
+                html += '<hr>';
+                return;
+            }
+            var q = line.match(/^&gt;\s?(.*)$/);
+            if (q) {
+                flushList();
+                html += '<blockquote>' + mdInline(q[1]) + '</blockquote>';
+                return;
+            }
+            var ul = line.match(/^[-*+]\s+(.*)$/);
+            if (ul) {
+                if (listTag !== 'ul') flushList();
+                listTag = 'ul';
+                var item = ul[1].replace(/^\[([ xX])\]\s+/, function (m, c) {
+                    return c.toLowerCase() === 'x' ? '☑ ' : '☐ ';
+                });
+                listBuf.push('<li>' + mdInline(item) + '</li>');
+                return;
+            }
+            var ol = line.match(/^\d+[.)]\s+(.*)$/);
+            if (ol) {
+                if (listTag !== 'ol') flushList();
+                listTag = 'ol';
+                listBuf.push('<li>' + mdInline(ol[1]) + '</li>');
+                return;
+            }
+            flushList();
+            html += '<p>' + mdInline(line) + '</p>';
+        });
+        flushList();
+        if (inCode && codeBuf.length) html += '<pre><code>' + codeBuf.join('\n') + '</code></pre>';
+        return html;
+    }
+    /* 카드·히스토리 발췌용: HTML+마크다운 기호 제거 → 평문 */
+    function stripMd(src) {
+        return stripHtml(src)
+            .replace(/```[\s\S]*?```/g, ' ')
+            .replace(/`([^`]*?)`/g, '$1')
+            .replace(/^#{1,6}\s+/gm, '')
+            .replace(/\*\*([^*]+?)\*\*/g, '$1')
+            .replace(/!\[([^\]]*?)\]\([^)]*?\)/g, '$1')
+            .replace(/\[([^\]]+?)\]\([^)]*?\)/g, '$1')
+            .replace(/^\s*&gt;\s?/gm, '')
+            .replace(/^\s*[-*+]\s+/gm, '')
+            .replace(/^\s*\d+[.)]\s+/gm, '')
+            .replace(/\s+/g, ' ').trim();
+    }
+    /* 한/원문 토글 블록 (메모리 보관 + 재렌더 — data 속성 전문 저장 폐지) */
+    var mdStore = {};
+    var mdSeq = 0;
+    function mdBlock(koText, enText) {
+        var show = koText || enText || '';
+        if (!show) return '';
+        if (koText && enText && koText !== enText) {
+            var key = 'm' + (++mdSeq);
+            mdStore[key] = { ko: koText, en: enText, showing: 'ko' };
+            return '<div class="md-body" data-mdtext data-key="' + key + '">' + md(koText) + '</div>' +
+                '<button class="orig-toggle" type="button" data-mdkey="' + key + '">원문보기</button>';
+        }
+        return '<div class="md-body">' + md(show) + '</div>';
     }
     function toast(msg) {
         var t = $('toast');
@@ -115,7 +233,7 @@
             : '<div class="ver">포착 ' + fmtDate(a.releaseDate || a.firstSeenAt) + '</div>';
         var notes = pick(a.releaseNotesKo, a.releaseNotesSummary);
         if (!notes.text) notes = pick(a.descriptionKo, a.descriptionSnippet);
-        var notesHtml = notes.text ? '<div class="notes">' + esc(notes.text) + '</div>' : '';
+        var notesHtml = notes.text ? '<div class="notes">' + esc(stripMd(notes.text)) + '</div>' : '';
         var meta = [];
         if (a.stars != null) meta.push('★ ' + a.stars);
         if (a.averageRating != null) meta.push('평점 ' + a.averageRating);
@@ -225,7 +343,9 @@
 
     /* ---------- Watchlist (버전 업데이트, 서버 필터+페이징) ---------- */
     function watchQuery() {
+        // T-132: updated=실제 버전업(prevVersion 있음)만, settled=버전 있는 정착앱 전체
         var p = new URLSearchParams({ sort: state.sort, page: state.page, pageSize: PAGE_SIZE, bumped: 'true' });
+        if (state.watchMode === 'updated') p.set('updatedOnly', 'true');
         if (state.license) p.set('license', state.license);
         if (state.tag) p.set('tag', state.tag);
         if (state.category) p.set('category', state.category);
@@ -417,32 +537,33 @@
         return '<section class="detail-sec"><h3>' + title + '</h3>' + inner + '</section>';
     }
     function detailHtml(a) {
-        // ① 소개 + ④ 세부 설명 (T-073: 중복 해소. README 결합 본문은 앞/뒷부분 분리,
-        // 그 외는 ①요약 300자 / ④전문으로 분리)
-        var fullText = a.descriptionKo || a.descriptionSnippet || '';
+        // ① 소개 + ④ 세부 설명 (T-073: README 결합 본문은 앞/뒷부분 분리,
+        // 그 외는 ①요약 300자 / ④전문으로 분리. T-142: 한/영 각각 분리 후 mdBlock 토글)
         var marker = '— README —';
-        var introText = '';
-        var detailBody = '';
-        if (fullText.indexOf(marker) >= 0) {
-            var parts = fullText.split(marker);
-            introText = parts[0].trim().slice(0, 300);
-            detailBody = parts.slice(1).join(marker).trim() || parts[0].trim();
-        } else if (fullText.length > 300) {
-            introText = fullText.slice(0, 300) + '…';
-            detailBody = fullText;
-        } else {
-            introText = fullText;
-            detailBody = '';
+        function splitBody(full) {
+            if (!full) return '';
+            if (full.indexOf(marker) >= 0) {
+                var p = full.split(marker);
+                return p.slice(1).join(marker).trim() || p[0].trim();
+            }
+            return full;
         }
-        var introHtml = introText
-            ? '<p>' + esc(introText) + '</p>' +
-                ((a.descriptionKo && a.descriptionSnippet && a.descriptionKo !== a.descriptionSnippet)
-                    ? '<button class="orig-toggle" type="button" data-ko="' + esc(a.descriptionKo.slice(0, 300)) + '" data-en="' + esc(a.descriptionSnippet.slice(0, 300)) + '">원문보기</button>'
-                    : '')
-            : '';
-        var funcHtml = detailBody && detailBody !== introText
-            ? '<p data-kotext>' + esc(detailBody) + '</p>' + origBtn(a.descriptionKo, a.descriptionSnippet)
-            : '';
+        function excerpt(full) {
+            if (!full) return '';
+            if (full.indexOf(marker) >= 0) return full.split(marker)[0].trim().slice(0, 300);
+            return full.length > 300 ? full.slice(0, 300) + '…' : full;
+        }
+        var koFull = a.descriptionKo || '';
+        var enFull = a.descriptionSnippet || '';
+        var introKo = excerpt(koFull);
+        var introEn = excerpt(enFull);
+        var introShow = introKo || introEn;
+        var introHtml = introShow ? mdBlock(introKo, introEn) : '';
+        var funcKo = splitBody(koFull);
+        var funcEn = splitBody(enFull);
+        var funcShow = funcKo || funcEn;
+        // 짧은 본문(요약과 동일)은 ④ 생략 — 중복 해소
+        var funcHtml = (funcShow && funcShow !== introShow) ? mdBlock(funcKo, funcEn) : '';
         // ② 스크린샷 (Apple CDN 직접 표시)
         var shots = '';
         if (a.screenshotUrls) {
@@ -475,16 +596,17 @@
                 var vlink = v.sourceUrl
                     ? ' <a target="_blank" rel="noopener" href="' + esc(v.sourceUrl) + '">열기</a>'
                     : '';
-                return '<tr><td>' + esc(v.version) + '</td><td>' + esc(v.notesSummary || '') + '</td><td>' + vlink + '</td></tr>';
+                return '<tr><td>' + esc(v.version) + '</td><td>' + esc(stripMd(v.notesSummary || '')) + '</td><td>' + vlink + '</td></tr>';
             }).join('');
-            news = (newsPick.text
-                ? '<p data-kotext>' + esc(newsPick.text) + '</p>' +
-                    origBtn(a.releaseNotesKo, a.releaseNotes || a.releaseNotesSummary)
-                : '') +
+            var newsKo = newsPick.isKo ? newsPick.text : '';
+            var newsEn = newsPick.isKo
+                ? (a.releaseNotes || a.releaseNotesSummary || '')
+                : newsPick.text;
+            news = (newsPick.text ? mdBlock(newsKo, newsEn) : '') +
                 '<table class="ver-table"><tr><th>버전</th><th>새 기능</th><th>링크</th></tr>' +
                 (a.version ? '<tr><td><b>' + esc(a.version) + '</b> (현재)' +
                     (a.prevVersion ? ' ← <s>' + esc(a.prevVersion) + '</s>' : '') + '</td><td>' +
-                    esc(a.releaseNotesSummary || '') + '</td><td></td></tr>' : '') + rows + '</table>';
+                    esc(stripMd(a.releaseNotesSummary || '')) + '</td><td></td></tr>' : '') + rows + '</table>';
         } else {
             news = '<p>버전 기록 없음 — ' + fmtDate(a.firstSeenAt) + ' 첫 포착, 다음 업데이트부터 기록됩니다.</p>';
         }
@@ -507,16 +629,15 @@
             sec('④ 세부 설명', funcHtml) + sec('⑤ 새로운 기능', news) +
             sec('⑥ 홈페이지 · ⑦ 다운로드 · 출처', dl);
     }
-    function origBtn(koText, enText) {
-        if (!koText || !enText || koText === enText) return '';
-        return '<button class="orig-toggle" type="button" data-ko="' + esc(koText) + '" data-en="' + esc(enText) + '">원문보기</button>';
-    }
     document.addEventListener('click', function (e) {
         var btn = e.target.closest ? e.target.closest('.orig-toggle') : null;
-        if (!btn) return;
-        var showingKo = btn.textContent === '원문보기';
-        var p = btn.parentElement.querySelector('[data-kotext]');
-        if (p) p.textContent = showingKo ? btn.dataset.en : btn.dataset.ko;
+        if (!btn || !btn.dataset.mdkey) return;
+        var t = mdStore[btn.dataset.mdkey];
+        if (!t) return;
+        var showingKo = t.showing === 'ko';
+        t.showing = showingKo ? 'en' : 'ko';
+        var box = btn.parentElement.querySelector('[data-mdtext][data-key="' + btn.dataset.mdkey + '"]');
+        if (box) box.innerHTML = md(showingKo ? t.en : t.ko);
         btn.textContent = showingKo ? '한국어보기' : '원문보기';
     });
 
@@ -575,6 +696,13 @@
         fetch('/api/sync', { method: 'POST', body: '{}' })
             .then(function () { toast('수집 요청됨'); })
             .catch(function () { toast('수집 요청 실패'); });
+    };
+    // T-150: 번역 즉시 실행 (적체 해소용 수동 실행 — 주기 대기 없이 1회 처리)
+    $('translateNow').onclick = function () {
+        if (!confirm('대기 중인 번역을 지금 실행할까요? (최대 100건)')) return;
+        fetch('/api/translate', { method: 'POST', body: '{}' })
+            .then(function () { toast('번역 요청됨'); })
+            .catch(function () { toast('번역 요청 실패'); });
     };
     var notifPage = 1;
     var NOTIF_PAGE_SIZE = 20;
@@ -635,6 +763,18 @@
                 x.classList.toggle('active', x === b);
             });
             loadStats();
+        };
+    });
+    // T-132: Watchlist 범위 전환 (업데이트=실제 bump만 / 전체=버전 있는 정착앱)
+    document.querySelectorAll('#watchModeRow button').forEach(function (b) {
+        b.onclick = function () {
+            state.watchMode = b.dataset.mode || 'updated';
+            state.page = 1;
+            document.querySelectorAll('#watchModeRow button').forEach(function (x) {
+                x.classList.toggle('active', x === b);
+            });
+            loadWatchlist();
+            window.scrollTo(0, 0);
         };
     });
     $('appModalClose').onclick = function () { $('appModal').close(); };

@@ -73,6 +73,18 @@ body { font-family: -apple-system, 'Apple SD Gothic Neo', sans-serif; margin: 0;
 .detail-sec { margin-top: 18px; }
 .detail-sec h3 { font-size: 14px; margin: 0 0 8px; color: var(--secondary); }
 .detail-sec p { font-size: 14px; line-height: 1.6; margin: 0; white-space: pre-wrap; }
+/* 마크다운 본문 (T-142) */
+.md-body p { font-size: 14px; line-height: 1.6; margin: 0 0 8px; }
+.md-body h4 { font-size: 15px; margin: 12px 0 6px; color: var(--text); }
+.md-body h5 { font-size: 14px; margin: 10px 0 6px; color: var(--text); }
+.md-body ul, .md-body ol { font-size: 14px; line-height: 1.6; padding-left: 20px; margin: 0 0 8px; }
+.md-body li { margin: 2px 0; }
+.md-body code { font-family: ui-monospace, 'SF Mono', Menlo, monospace; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-size: 12.5px; }
+.md-body pre { background: #1A1B1E; border-radius: 8px; padding: 10px 12px; overflow-x: auto; margin: 0 0 8px; }
+.md-body pre code { background: none; border: none; padding: 0; color: #E8EAED; font-size: 12.5px; }
+.md-body blockquote { border-left: 3px solid var(--border); margin: 0 0 8px; padding: 4px 10px; color: var(--secondary); }
+.md-body a { color: var(--primary); }
+.md-body hr { border: none; border-top: 1px solid var(--border); margin: 10px 0; }
 .shot-row { display: flex; gap: 8px; overflow-x: auto; }
 .shot-row img { height: 220px; border-radius: 8px; border: 1px solid var(--border); }
 .feat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; font-size: 13px; }

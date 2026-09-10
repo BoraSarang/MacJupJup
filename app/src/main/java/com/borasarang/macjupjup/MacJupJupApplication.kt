@@ -68,6 +68,17 @@ class MacJupJupApplication : Application() {
             } catch (e: Exception) {
                 DebugLogger.w("정리", "Setapp 제거 스킵: ${e.message}")
             }
+            // T-161: PH·HN·MMB 수집처 완전 제거 (버전 추적 불가): Setapp과 동일 패턴
+            for ((id, name) in REMOVED_SOURCES_V16) {
+                try {
+                    crawlScheduler.cancelSource(id)
+                    if (sourceRepository.removeSource(id) > 0) {
+                        appRepository.purgeSource(id, name)
+                    }
+                } catch (e: Exception) {
+                    DebugLogger.w("정리", "수집처 제거 스킵 source=$id: ${e.message}")
+                }
+            }
             // isNew 정책: 7일 경과 NEW 해제 (와치리스트 진입)
             try {
                 appRepository.clearStaleNewFlags()
@@ -101,6 +112,13 @@ class MacJupJupApplication : Application() {
         /** 제거된 수집처 (Setapp 완전 제거). 행·매핑·고아앱·로그 정리 대상 */
         const val REMOVED_SOURCE_SETAPP = "setapp_seed"
         const val REMOVED_SOURCE_SETAPP_NAME = "Setapp 베이스라인"
+
+        /** T-161 제거된 수집처 (PH·HN·MMB, 버전 추적 불가). id → 표시명 */
+        val REMOVED_SOURCES_V16 = listOf(
+            "producthunt" to "Product Hunt mac 토픽",
+            "hn_show" to "Hacker News Show HN",
+            "macmenubar" to "MacMenuBar 신규",
+        )
     }
 
     /** 파괴 폴백 전 원본 DB 백업 (files/db-backup/). 실패해도 재생성은 진행 */

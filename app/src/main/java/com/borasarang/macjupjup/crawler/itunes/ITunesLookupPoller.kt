@@ -50,7 +50,9 @@ class ITunesLookupPoller(
                 for (r in results) {
                     val app = byId[r.trackId] ?: continue
                     val now = System.currentTimeMillis()
-                    val versionChanged = r.version != null && app.version != null && r.version != app.version
+                    // T-132: 공백 차이 버전 오판 방지 (정규화 비교)
+                    val versionChanged = r.version != null && app.version != null &&
+                        !com.borasarang.macjupjup.util.MergeUtils.sameVersion(r.version, app.version)
                     val needsEnrich = app.screenshotUrls.isNullOrBlank() && !r.screenshotUrls.isNullOrEmpty() ||
                         app.averageRating == null && r.averageRating != null ||
                         app.descriptionSnippet.isNullOrBlank() && !r.description.isNullOrBlank() ||

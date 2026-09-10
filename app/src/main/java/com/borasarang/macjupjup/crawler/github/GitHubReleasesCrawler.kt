@@ -44,13 +44,14 @@ class GitHubReleasesCrawler(
                     headers,
                 )
                 val latest = parseLatestRelease(body) ?: continue
-                if (latest.tag != null && latest.tag != app.version) {
+                if (latest.tag != null && !com.borasarang.macjupjup.util.MergeUtils.sameVersion(latest.tag, app.version)) {
                     val now = System.currentTimeMillis()
+                    val notes = cleanNotes(latest.notes)
                     val updated = app.copy(
                         version = latest.tag,
                         prevVersion = app.version,
-                        releaseNotesSummary = latest.notes?.take(500),
-                        releaseNotes = latest.notes?.take(2000) ?: app.releaseNotes,
+                        releaseNotesSummary = notes?.take(500),
+                        releaseNotes = notes?.take(2000) ?: app.releaseNotes,
                         lastUpdatedAt = now,
                         isNew = false,
                     )
@@ -78,6 +79,18 @@ class GitHubReleasesCrawler(
     }
 
     data class LatestRelease(val tag: String?, val notes: String?, val url: String?)
+
+    /** 릴리즈노트 살균 (T-143): 날 HTML 태그·주석 제거, 마크다운 구조 유지, 과도 개행 정리 */
+    internal fun cleanNotes(raw: String?): String? {
+        if (raw.isNullOrBlank()) return null
+        var t = raw
+        t = t.replace(Regex("<!--[\\s\\S]*?-->"), "")
+        t = t.replace(Regex("</?[a-zA-Z][^>\\n]*>"), "")
+        t = t.replace(Regex("[ \\t]+"), " ")
+        t = t.replace(Regex("\\n{3,}"), "\n\n")
+        t = t.trim()
+        return t.ifBlank { null }
+    }
 
     internal fun parseLatestRelease(body: String): LatestRelease? {
         val arr = try {

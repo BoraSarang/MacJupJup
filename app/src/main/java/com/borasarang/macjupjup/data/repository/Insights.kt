@@ -58,7 +58,7 @@ fun buildInsights(i: InsightsInput): List<Insight> {
         out += Insight(
             icon = "🌐",
             title = "번역 대기",
-            body = "${i.untranslated}건이 한글 번역 대기 중 (6시간마다 자동 처리)",
+            body = "${i.untranslated}건이 한글 번역 대기 중 (3시간마다 자동 처리)",
         )
     }
     if (i.bumpsLast7d > 0) {

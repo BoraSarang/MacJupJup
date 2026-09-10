@@ -15,14 +15,34 @@ class ReadmeCleanTest {
     )
 
     @Test
-    fun `마크다운_정리`() {
+    fun `마크다운_보존_T140`() {
         val raw = "# Title\n\nSome **bold** text with [link](https://x).\n\n- item one\n- item two\n"
         val cleaned = GitHubSearchCrawler(source).cleanReadme(raw)
         assertNotNull(cleaned)
-        assertTrue(cleaned!!.contains("Title"))
-        assertTrue(!cleaned.contains("**"))
-        assertTrue(!cleaned.contains("](https://x)"))
-        assertTrue(cleaned.contains("· item one"))
+        assertTrue(cleaned!!.contains("# Title"))
+        assertTrue(cleaned.contains("**bold**"))
+        assertTrue(cleaned.contains("[link](https://x)"))
+        assertTrue(cleaned.contains("- item one"))
+    }
+
+    @Test
+    fun `HTML_살균_T140`() {
+        val raw = "Hello <script>alert(1)</script> world\n\n<!-- comment -->\n\nText"
+        val cleaned = GitHubSearchCrawler(source).cleanReadme(raw)
+        assertNotNull(cleaned)
+        assertTrue(!cleaned!!.contains("<script>"))
+        assertTrue(!cleaned.contains("<!--"))
+        assertTrue(cleaned.contains("Hello"))
+        assertTrue(cleaned.contains("world"))
+    }
+
+    @Test
+    fun `코드펜스_보존_T140`() {
+        val raw = "Usage:\n\n```sh\nbrew install foo\n```\n"
+        val cleaned = GitHubSearchCrawler(source).cleanReadme(raw)
+        assertNotNull(cleaned)
+        assertTrue(cleaned!!.contains("```sh"))
+        assertTrue(cleaned.contains("brew install foo"))
     }
 
     @Test
