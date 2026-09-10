@@ -88,16 +88,12 @@
 - [x] T-130 포털 소개 원문보기 토글 수정 (data-kotext + 전문 토글)
 - [x] T-131 번역 줄 단위 분할 (개행 보존) + 개행 소실 행 재번역
 - [x] T-132 Watchlist 탭 분리 (업데이트=prevVersion / 전체 버전앱) + 버전 trim 정규화
-- [ ] T-139 빌드·단위·lint + S22 실측 + CHANGELOG·세션 로그
+- [x] T-139 S22 wipe·재설치·재수집 + 번역 즉시 실행 — T-149 포털 눈확인만 잔여
 
 ## v1.6 수집처 정리 PH·HN·MMB 제거 (PLAN_v1.6_prune-sources, 진행 중)
 - [x] T-160 크롤러·시드·상수·팩토리·placeholder 제거
 - [x] T-161 시작 시 purge 3종 + 예약 취소
-- [ ] T-169 빌드·단위·lint + S22 실측·DB wipe·재수집 + CHANGELOG·세션 로그
-- [x] T-130 포털 소개 원문보기 토글 수정 (data-kotext + 전문 토글)
-- [x] T-131 번역 줄 단위 분할 (개행 보존) + 개행 소실 행 재번역
-- [x] T-132 Watchlist 탭 분리 (업데이트=prevVersion / 전체 버전앱) + 버전 trim 정규화
-- [ ] T-139 빌드·단위·lint + S22 실측 + CHANGELOG·세션 로그
+- [x] T-169 S22 wipe·재설치·재수집 (3508건) + 번역 즉시 실행 — 포털 눈확인만 잔여
 
 ## v1.5 마크다운 렌더링 (PLAN_v1.5_markdown, 진행 중)
 - [x] T-140 수집 cleanReadme 마크다운 보존·살균
@@ -105,10 +101,7 @@
 - [x] T-142 포털 md 렌더러 + 카드 strip + 토글 재렌더 + CSS
 - [x] T-143 HTML 잔재 제거 (포털 전체 stripHtml + 릴리즈노트 살균)
 - [x] T-150 번역 처리율 상향 (주기 6h→3h·회당 30→100건·REPLACE 교체) + 포털 수동 번역 버튼
-- [x] T-130 포털 소개 원문보기 토글 수정 (data-kotext + 전문 토글)
-- [x] T-131 번역 줄 단위 분할 (개행 보존) + 개행 소실 행 재번역
-- [x] T-132 Watchlist 탭 분리 (업데이트=prevVersion / 전체 버전앱) + 버전 trim 정규화
-- [ ] T-139 빌드·단위·lint + S22 실측 + CHANGELOG·세션 로그
+- [ ] T-149 포털 눈확인 (마크다운 렌더·토글·Watchlist 탭·🌐 버튼)
 
 ## 완료 기준 (DoD 요약)
 
