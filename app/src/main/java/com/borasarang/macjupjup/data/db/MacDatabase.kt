@@ -19,7 +19,7 @@ import com.borasarang.macjupjup.data.db.entity.VersionHistory
 
 @Database(
     entities = [App::class, AppSourceMapping::class, CrawlSource::class, VersionHistory::class, CrawlLog::class, NotificationLog::class],
-    version = 2,
+    version = 4,
     exportSchema = false,
 )
 abstract class MacDatabase : RoomDatabase() {
@@ -31,29 +31,42 @@ abstract class MacDatabase : RoomDatabase() {
     abstract fun notificationLogDao(): NotificationLogDao
 
     companion object {
+        const val DB_NAME = "macjupjup.db"
+
         @Volatile
         private var instance: MacDatabase? = null
 
-        fun getInstance(context: Context): MacDatabase {
+        /** 단일 진입점 (P0-7: 이중 생성 레이스 제거) */
+        fun getInstance(context: Context, allowDestructive: Boolean = false): MacDatabase {
             return instance ?: synchronized(this) {
-                instance ?: Room.databaseBuilder(
-                    context.applicationContext,
-                    MacDatabase::class.java,
-                    "macjupjup.db",
-                ).addMigrations(MIGRATION_1_2)
-                    .fallbackToDestructiveMigration(false).build().also { instance = it }
+                instance ?: buildDatabase(context, allowDestructive).also { instance = it }
             }
         }
 
-        /** 마이그레이션 실패 시 최후 수단 (데이터 손실 감수, 앱 벽돌 방지) */
+        private fun buildDatabase(context: Context, allowDestructive: Boolean): MacDatabase {
+            val builder = Room.databaseBuilder(
+                context.applicationContext,
+                MacDatabase::class.java,
+                DB_NAME,
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+            if (allowDestructive) builder.fallbackToDestructiveMigration(true)
+            return builder.build()
+        }
+
+        /** 마이그레이션 실패 등 DB 열기 불가 → 재생성 폴백 (앱 벽돌 방지).
+         *  호출 전 원본 백업 권장. 하위 호환 유지용 별칭. */
         fun getInstanceFallback(context: Context): MacDatabase {
-            return instance ?: synchronized(this) {
-                instance ?: Room.databaseBuilder(
-                    context.applicationContext,
-                    MacDatabase::class.java,
-                    "macjupjup.db",
-                ).fallbackToDestructiveMigration(true).build().also { instance = it }
+            return getInstance(context, allowDestructive = true)
+        }
+
+        /** 테스트·복구용 인스턴스 초기화 */
+        @Synchronized
+        fun resetInstance() {
+            try {
+                instance?.close()
+            } catch (_: Exception) {
             }
+            instance = null
         }
     }
 }

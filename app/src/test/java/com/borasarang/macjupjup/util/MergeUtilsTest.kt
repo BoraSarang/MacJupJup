@@ -27,4 +27,10 @@ class MergeUtilsTest {
         val id = MergeUtils.generateId("A".repeat(100), "B".repeat(100))
         assertEquals(128, id.length)
     }
+
+    @Test
+    fun `정규화_단일진실`() {
+        assertEquals("soundpaste", MergeUtils.normalizeName("SoundPaste!"))
+        assertEquals("macmenubar", MergeUtils.normalizeName("MacMenuBar"))
+    }
 }

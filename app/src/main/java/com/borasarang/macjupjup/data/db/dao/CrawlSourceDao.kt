@@ -28,4 +28,8 @@ interface CrawlSourceDao {
 
     @Query("UPDATE sources SET lastRunAt = :runAt, lastStatus = :status, errorMessage = :error WHERE id = :id")
     suspend fun updateRun(id: String, runAt: Long, status: String, error: String?)
+
+    /** 제거된 수집처 행 삭제 (Setapp 완전 제거용). 반환 = 삭제 행 수 */
+    @Query("DELETE FROM sources WHERE id = :id")
+    suspend fun deleteById(id: String): Int
 }

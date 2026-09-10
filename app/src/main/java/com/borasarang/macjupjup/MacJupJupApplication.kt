@@ -44,8 +44,10 @@ class MacJupJupApplication : Application() {
         database = try {
             MacDatabase.getInstance(this)
         } catch (e: Exception) {
-            // 마이그레이션 실패 등 DB 열기 불가 → 재생성 폴백 (앱 벽돌 방지)
-            DebugLogger.e("앱", "E-AND-DB-0403", "DB 열기 실패, 재생성: ${e.message}", e)
+            // 마이그레이션 실패 등 DB 열기 불가 → 원본 백업 후 재생성 (P0-6: 무확인 삭제 방지)
+            DebugLogger.e("앱", "E-AND-DB-0403", "DB 열기 실패, 백업 후 재생성: ${e.message}", e)
+            backupDatabaseFile()
+            MacDatabase.resetInstance()
             MacDatabase.getInstanceFallback(this)
         }
         appRepository = AppRepository(database)
@@ -57,6 +59,21 @@ class MacJupJupApplication : Application() {
 
         appScope.launch(Dispatchers.IO) {
             InitialDataSeeder.seedIfEmpty(database)
+            // Setapp 수집처 완전 제거 (사용자 결정): 예약 취소 → 소스행·매핑·고아앱·로그 삭제
+            try {
+                crawlScheduler.cancelSource(REMOVED_SOURCE_SETAPP)
+                if (sourceRepository.removeSource(REMOVED_SOURCE_SETAPP) > 0) {
+                    appRepository.purgeSource(REMOVED_SOURCE_SETAPP, REMOVED_SOURCE_SETAPP_NAME)
+                }
+            } catch (e: Exception) {
+                DebugLogger.w("정리", "Setapp 제거 스킵: ${e.message}")
+            }
+            // isNew 정책: 7일 경과 NEW 해제 (와치리스트 진입)
+            try {
+                appRepository.clearStaleNewFlags()
+            } catch (e: Exception) {
+                DebugLogger.w("정리", "NEW 해제 스킵: ${e.message}")
+            }
             // v1.1 1회성 복구: 콤마 구분자로 깨진 CDN 스크린샷 정리 (다음 lookup/상세 수집에서 복원)
             try {
                 val cleared = database.appDao().clearBrokenCdnScreenshots()
@@ -80,5 +97,25 @@ class MacJupJupApplication : Application() {
     companion object {
         lateinit var instance: MacJupJupApplication
             private set
+
+        /** 제거된 수집처 (Setapp 완전 제거). 행·매핑·고아앱·로그 정리 대상 */
+        const val REMOVED_SOURCE_SETAPP = "setapp_seed"
+        const val REMOVED_SOURCE_SETAPP_NAME = "Setapp 베이스라인"
+    }
+
+    /** 파괴 폴백 전 원본 DB 백업 (files/db-backup/). 실패해도 재생성은 진행 */
+    private fun backupDatabaseFile() {
+        try {
+            val src = getDatabasePath(MacDatabase.DB_NAME)
+            if (!src.exists()) return
+            val dir = java.io.File(filesDir, "db-backup").apply { mkdirs() }
+            val dst = java.io.File(dir, "${MacDatabase.DB_NAME}.${System.currentTimeMillis()}.bak")
+            src.inputStream().use { input ->
+                dst.outputStream().use { output -> input.copyTo(output) }
+            }
+            DebugLogger.i("앱", "DB 백업 완료 ${dst.absolutePath} (${dst.length()}B)")
+        } catch (e: Exception) {
+            DebugLogger.e("앱", "E-AND-DB-0403", "DB 백업 실패: ${e.message}", e)
+        }
     }
 }

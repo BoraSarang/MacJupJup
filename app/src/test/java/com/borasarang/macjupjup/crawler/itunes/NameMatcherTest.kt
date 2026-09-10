@@ -62,6 +62,16 @@ class NameMatcherTest {
     }
 
     @Test
+    fun `수집원표기_MMB도_플레이스홀더_T071`() {
+        assertTrue(ITunesNameMatcher.isPlaceholderDeveloper("MacMenuBar"))
+        // MMB 수집 앱도 단일 후보 폴백 대상
+        val hit = SearchHit(9, "Lyrimuse", "Yudaotor", "u")
+        assertTrue(
+            ITunesNameMatcher.singleExactFallback("Lyrimuse", "MacMenuBar", listOf(hit)) == hit
+        )
+    }
+
+    @Test
     fun `정규화_공백특수문자무시`() {
         assertTrue(
             ITunesNameMatcher.isStrictMatch(

@@ -6,6 +6,7 @@ import com.borasarang.macjupjup.data.db.entity.CrawlSource
 import com.borasarang.macjupjup.util.AppLicense
 import com.borasarang.macjupjup.util.CategoryInfer
 import com.borasarang.macjupjup.util.Constants
+import com.borasarang.macjupjup.util.DebugLogger
 import com.borasarang.macjupjup.util.MergeUtils
 import com.borasarang.macjupjup.util.classifyLicense
 import kotlinx.coroutines.Dispatchers
@@ -41,6 +42,41 @@ abstract class BaseCrawler(
 
     protected suspend fun politenessDelay() {
         delay(Constants.CRAWL_REQUEST_DELAY_MS)
+    }
+
+    /** 파싱 실패 (E-AND-CRAWL-0201). 크롤러별 throw 하드코딩 통합 */
+    protected fun parseFail(what: String): Nothing =
+        throw IllegalStateException("$what 파싱 실패 (E-AND-CRAWL-0201)")
+
+    /**
+     * R1-3: 피드/쿼리/키워드 순회 템플릿.
+     * 입력당 fetch+parse → 실패는 해당 입력만 스킵 → 예의 대기 → 중복 제거 → 완료 로그.
+     */
+    protected suspend fun <T> crawlEach(
+        inputs: List<T>,
+        label: String,
+        dedupKey: (AppDraft) -> Any? = { it.app.id },
+        fetchOne: suspend (T) -> List<AppDraft>,
+    ): List<AppDraft> {
+        val drafts = mutableListOf<AppDraft>()
+        for (input in inputs) {
+            try {
+                drafts += fetchOne(input)
+            } catch (e: Exception) {
+                DebugLogger.w("수집", "$label 스킵 $input: ${e.message}")
+            }
+            politenessDelay()
+        }
+        val seen = mutableSetOf<Any?>()
+        return drafts.filter { seen.add(dedupKey(it)) }.also {
+            DebugLogger.i("수집", "$label 완료 inputs=${inputs.size} found=${drafts.size} unique=${it.size}")
+        }
+    }
+
+    /** id 기준 중복 제거 (R1-9) */
+    protected fun dedupById(drafts: List<AppDraft>): List<AppDraft> {
+        val seen = mutableSetOf<String>()
+        return drafts.filter { seen.add(it.app.id) }
     }
 
     /**

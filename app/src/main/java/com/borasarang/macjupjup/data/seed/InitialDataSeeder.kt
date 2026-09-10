@@ -6,7 +6,8 @@ import com.borasarang.macjupjup.util.Constants
 import com.borasarang.macjupjup.util.DebugLogger
 
 /**
- * 초기 수집 소스 8개 시드. selectorConfigJson=null = 코드 기본값 사용.
+ * 초기 수집 소스 9개 시드 (Setapp 제거됨). selectorConfigJson=null = 코드 기본값 사용.
+ * setapp_seed 잔재는 Application 시작 시 purge (행·매핑·고아앱·로그 삭제).
  * setapp_seed는 구조 검증됨 → 활성. DB v1 기존 기기는 없는 소스만 추가(seedMissing).
  */
 object InitialDataSeeder {
@@ -65,19 +66,6 @@ object InitialDataSeeder {
                     selectorConfigJson = null,
                 ),
                 CrawlSource(
-                    id = Constants.SOURCE_SETAPP_SEED,
-                    name = "Setapp 베이스라인",
-                    type = Constants.TYPE_SETAPP_SEED,
-                    baseUrl = "https://setapp.com",
-                    enabled = true,
-                    intervalHours = 720,
-                    intervalMinutes = 43200,
-                    lastRunAt = null,
-                    lastStatus = Constants.STATUS_NEVER_RUN,
-                    errorMessage = null,
-                    selectorConfigJson = null,
-                ),
-                CrawlSource(
                     id = Constants.SOURCE_CHART_RSS,
                     name = "Mac 차트 RSS",
                     type = Constants.TYPE_CHART_RSS,
@@ -124,6 +112,19 @@ object InitialDataSeeder {
                     enabled = true,
                     intervalHours = 6,
                     intervalMinutes = 360,
+                    lastRunAt = null,
+                    lastStatus = Constants.STATUS_NEVER_RUN,
+                    errorMessage = null,
+                    selectorConfigJson = null,
+                ),
+                CrawlSource(
+                    id = Constants.SOURCE_MAS_DISCOVERY,
+                    name = "MAS 키워드 발견",
+                    type = Constants.TYPE_MAS_DISCOVERY,
+                    baseUrl = "https://itunes.apple.com",
+                    enabled = true,
+                    intervalHours = 24,
+                    intervalMinutes = 1440,
                     lastRunAt = null,
                     lastStatus = Constants.STATUS_NEVER_RUN,
                     errorMessage = null,

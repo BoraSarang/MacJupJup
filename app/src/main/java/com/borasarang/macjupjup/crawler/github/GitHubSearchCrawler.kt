@@ -2,6 +2,8 @@ package com.borasarang.macjupjup.crawler.github
 
 import com.borasarang.macjupjup.crawler.AppDraft
 import com.borasarang.macjupjup.crawler.BaseCrawler
+import com.borasarang.macjupjup.crawler.int
+import com.borasarang.macjupjup.crawler.str
 import com.borasarang.macjupjup.data.db.entity.CrawlSource
 import com.borasarang.macjupjup.util.DebugLogger
 import kotlinx.serialization.json.Json
@@ -12,21 +14,6 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.net.URLEncoder
 import java.time.Instant
-
-/** JsonObject 안전 추출 헬퍼 (키 없음·JsonNull → null) */
-internal fun JsonObject.str(key: String): String? {
-    val el = get(key) ?: return null
-    if (el is JsonNull) return null
-    return try {
-        el.jsonPrimitive.content
-    } catch (_: Exception) {
-        null
-    }
-}
-
-internal fun JsonObject.int(key: String): Int? = str(key)?.toIntOrNull()
-
-internal fun JsonObject.dbl(key: String): Double? = str(key)?.toDoubleOrNull()
 
 /**
  * GitHub 신규·갱신 저장소 발굴.
@@ -42,11 +29,7 @@ class GitHubSearchCrawler(
 ) : BaseCrawler(source) {
 
     override suspend fun crawl(): Result<List<AppDraft>> = runCatching {
-        val headers = buildMap {
-            put("Accept", "application/vnd.github+json")
-            put("X-GitHub-Api-Version", "2022-11-28")
-            if (token.isNotBlank()) put("Authorization", "Bearer $token")
-        }
+        val headers = githubHeaders(token)
         val drafts = mutableListOf<AppDraft>()
         for (q in queries) {
             val url = "https://api.github.com/search/repositories" +
@@ -105,7 +88,7 @@ class GitHubSearchCrawler(
         val items = try {
             Json.parseToJsonElement(body).jsonObject["items"]?.jsonArray ?: return emptyList()
         } catch (_: Exception) {
-            throw IllegalStateException("GitHub Search 응답 파싱 실패 (E-AND-CRAWL-0201)")
+            parseFail("GitHub Search 응답")
         }
         return items.mapNotNull { el ->
             try {

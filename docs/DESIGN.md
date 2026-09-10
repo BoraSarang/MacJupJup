@@ -51,13 +51,13 @@ main
 │         / 새 기능 요약 2줄 / 스타·평점 / repo·스토어 출처뱃지(새탭)
 ├─ section#watchlist: 버전 diff 목록 (이전→현재, 변경일, 요약, 링크)
 ├─ section#appDetail (카드 클릭 → 모달/전용 뷰, 7섹션 고정 순서)
-│   ├─ ① 소개: description 발췌 + 더보기 (출처 표기)
+│   ├─ ① 소개: 발췌 300자 (한글 기본·원문 토글)
 │   ├─ ② 스크린샷: screenshotUrls 가로 캐러셀 (Apple CDN 직접 표시, 재호스팅 금지)
 │   ├─ ③ 특징: 평점·평가수·연령등급·용량·지원언어·최소OS 하이라이트 + 태그
-│   ├─ ④ 기능: description 본문 전체
-│   ├─ ⑤ 새로운 기능: currentVersionReleaseDate + releaseNotes (버전별 히스토리와 연결)
-│   ├─ ⑥ 홈페이지: sellerUrl/artistViewUrl 버튼
-│   └─ ⑦ 다운로드 링크: trackViewUrl(App Store) + repoFullName(GitHub) 버튼
+│   ├─ ④ 세부 설명: README 뒷부분·전문 (①과 중복 해소)
+│   ├─ ⑤ 새로운 기능: 버전 히스토리 + 버전별 링크 (GitHub 릴리즈 / MAS 현재 페이지 명시)
+│   ├─ ⑥ 홈페이지: homepageUrl 버튼 (없으면 생략, repo로 둔갑 금지)
+│   └─ ⑦ 다운로드·출처: repoFullName(GitHub)·trackId(스토어) + sources[] 출처 목록
 └─ section#stats: 카테고리별 신규수 / AI 비중 / 릴리즈 주기 / 스타 속도 (SVG 바닐라 차트)
 폰(≤600px) 1열·버튼·칩 최소 44px 터치 영역
 ```

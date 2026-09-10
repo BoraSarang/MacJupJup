@@ -2,9 +2,9 @@ package com.borasarang.macjupjup.crawler.hn
 
 import com.borasarang.macjupjup.crawler.AppDraft
 import com.borasarang.macjupjup.crawler.BaseCrawler
-import com.borasarang.macjupjup.crawler.github.str
+import com.borasarang.macjupjup.crawler.str
+import com.borasarang.macjupjup.crawler.splitTitle
 import com.borasarang.macjupjup.data.db.entity.CrawlSource
-import com.borasarang.macjupjup.util.DebugLogger
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
@@ -23,17 +23,10 @@ class HnShowCrawler(
 ) : BaseCrawler(source) {
 
     override suspend fun crawl(): Result<List<AppDraft>> = runCatching {
-        val drafts = mutableListOf<AppDraft>()
-        for (q in queries) {
+        crawlEach(queries, "Show HN") { q ->
             val url = "https://hn.algolia.com/api/v1/search" +
                 "?tags=show_hn&query=${URLEncoder.encode(q, "UTF-8")}&hitsPerPage=$HITS"
-            val body = fetchGet(url)
-            drafts += parseHits(body)
-            politenessDelay()
-        }
-        val seen = mutableSetOf<String>()
-        drafts.filter { seen.add(it.app.id) }.also {
-            DebugLogger.i("수집", "Show HN 완료 queries=${queries.size} found=${drafts.size} unique=${it.size}")
+            parseHits(fetchGet(url))
         }
     }
 
@@ -41,7 +34,7 @@ class HnShowCrawler(
         val hits = try {
             Json.parseToJsonElement(body).jsonObject["hits"]?.jsonArray ?: return emptyList()
         } catch (_: Exception) {
-            throw IllegalStateException("HN 응답 파싱 실패 (E-AND-CRAWL-0201)")
+            parseFail("HN 응답")
         }
         return hits.mapNotNull { el ->
             try {
@@ -56,10 +49,10 @@ class HnShowCrawler(
                 val externalUrl = o.str("url")?.takeIf { it.isNotBlank() }
                 val author = o.str("author") ?: "HN"
                 // "Show HN: 이름 — 설명" 관례 분리 (공백 포함 구분자만)
-                val name = title.removePrefix("Show HN:")
-                    .removePrefix("Show HN")
-                    .split(" — ", " – ", " | ", " - ", ": ").first().trim()
-                    .ifBlank { title }
+                val name = splitTitle(
+                    title.removePrefix("Show HN:").removePrefix("Show HN"),
+                    listOf(": "),
+                ).ifBlank { title }
                 buildDraft(
                     name = name,
                     developer = "HN @$author",
@@ -78,11 +71,11 @@ class HnShowCrawler(
         const val MIN_TRACTION = 3
         val DEFAULT_QUERIES = listOf("macos", "mac app")
 
-        private val MAC_KEYS = listOf("mac", "macos", "menu bar", "menubar", "swiftui", "mac app", "appkit", "notch")
+        /** 공통 7종 외 HN 전용 키워드 */
+        private val HN_EXTRA_KEYWORDS = setOf("swiftui", "appkit")
 
-        fun isMacShow(title: String): Boolean {
-            val hay = " $title ".lowercase()
-            return MAC_KEYS.any { hay.contains(it) }
-        }
+        /** 호환 유지: 기존 시그니처 (테스트용) */
+        fun isMacShow(title: String): Boolean =
+            com.borasarang.macjupjup.crawler.isMacRelated(title, HN_EXTRA_KEYWORDS)
     }
 }

@@ -16,7 +16,8 @@
 - 쿼리: `license`(OSS/FREE/PAID), `category`(10종 중 1),
   `tag`(AI-Agent/MenuBar), `q`(이름·개발사 검색),
   `sort`(newest/updated/stars/rating, 기본 newest),
-  `page`(기본 1), `pageSize`(기본 50, 최대 100)
+  `page`(기본 1), `pageSize`(기본 50, 최대 100),
+  `bumped`(true면 버전업만, 와치리스트용 v1.6)
 - `platform`은 서버 고정 `macOS` (클라이언트 지정 불필요)
 - 응답:
 ```json
@@ -41,7 +42,7 @@
       "lastUpdatedAt": 1699900000000,
       "isNew": false,
       "sources": [
-        {"sourceName": "Setapp", "sourceUrl": "https://setapp.com/apps/raycast"}
+        {"sourceName": "MacMenuBar 신규", "sourceUrl": "https://macmenubar.com/lyrimuse/"}
       ]
     }
   ],
@@ -53,17 +54,22 @@
 
 ## GET /api/apps/{id}
 
-- 성공 200: App + version_history + sources + 상세 7섹션 필드. 없음 404: `{"error":"Not found"}`
-- 상세 필드 매핑 (iTunes lookup → 7섹션):
-  - 소개: `description` 발췌 / 스크린샷: `screenshotUrls[]` (CDN 직접 표시)
-  - 특징: `averageUserRating`·`userRatingCount`·`trackContentRating`·`fileSizeBytes`·`minimumOsVersion`·태그
-  - 기능: `description` 본문 / 새로운 기능: `version`+`currentVersionReleaseDate`+`releaseNotes`
-  - 홈페이지: `sellerUrl` / 다운로드: `trackViewUrl` + `repoFullName`
+- 성공 200: App + version_history(`sourceUrl` 포함, T-080) + sources + 상세 7섹션 필드. 없음 404: `{"error":"Not found"}`
+- 상세 필드 매핑 (v1.2):
+  - ①소개: 발췌 300자 / ④세부 설명: README 뒷부분·전문 (①과 중복 해소)
+  - ⑥홈페이지: `homepageUrl` / Repo: `repoFullName`→GitHub URL / 스토어: `trackId`→현재 페이지
+  - 출처: `sources[]` 목록 (발견처만, 둔갑 금지). MAS는 버전고정 불가라 현재 페이지로 명시
+
+## POST /api/apps/seed
+
+- 수동 시드 (T-061, 차트·키워드 밖 니치 앱 직접 등록).
+  바디: `{"trackId":6471012328}` 또는 `{"name":"SoundPaste"}` (이름은 정규화 완전일치만)
+- 응답: `{"seeded":1,"created":1,"updated":0}`. 없음 404 `{"seeded":0}`
 
 ## GET /api/watchlist
 
-- 응답: 시드 3층 상태
-  `[{"id":"setapp_seed","name":"Setapp 베이스라인","type":"SETAPP_SEED","enabled":true,"intervalHours":720,"lastRunAt":ts,"lastStatus":"SUCCESS","appCount":203}, ...]`
+- 응답: 9개 소스 상태 (Setapp 제거됨, v1.3)
+  `[{"id":"mas_discovery","name":"MAS 키워드 발견","type":"MAS_DISCOVERY","enabled":true,"intervalHours":24,"lastRunAt":ts,"lastStatus":"SUCCESS"}, ...]`
 
 ## POST /api/sync
 
@@ -78,6 +84,16 @@
 
 - 쿼리: `gran`(`daily`, 기본), `days`(기본 30)
 - 카테고리별 신규·버전업 추이 + AI 비중 + 릴리즈 주기 + 스타 속도
+
+## GET /api/stats/collect
+
+- 일별 수집량 그래프용 (v1.3). 쿼리 `days`(1~30, 기본 14)
+- 응답: `{"days":[{"day":"2026-09-10","found":1994,"new":1829,"updated":0,"runs":3,"bySource":[...]}],"total":{"found":N,"new":N,"updated":N}}`
+
+## GET /api/stats/insights
+
+- 트렌드 인사이트 카드 (v1.3). 응답: `{"insights":[{"icon":"🏆","title":"이번 주 수집왕","body":"..."}]}`
+- 규칙: 수집왕 → 신규 급증일 → 실패 경고 → 번역 대기 → 버전 활동 → 카테고리 편중
 
 ## GET /api/notifications
 

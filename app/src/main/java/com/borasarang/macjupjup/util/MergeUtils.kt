@@ -7,11 +7,13 @@ object MergeUtils {
      * 동일 키 다출처 수집 시 1개 App으로 병합.
      */
     fun generateId(name: String, developer: String): String {
-        val norm = { s: String ->
-            s.lowercase()
-                .replace("[^a-z0-9가-힣]".toRegex(), "")
-                .take(64)
-        }
-        return "${norm(developer)}-${norm(name)}".trim('-').take(128)
+        return "${normalizeName(developer)}-${normalizeName(name)}".trim('-').take(128)
+    }
+
+    /** 이름·개발사 정규화 단일 진실 (R1-11). 크롤러·서버에서 재사용 */
+    fun normalizeName(s: String): String {
+        return s.lowercase()
+            .replace("[^a-z0-9가-힣]".toRegex(), "")
+            .take(64)
     }
 }

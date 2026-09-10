@@ -8,3 +8,7 @@
 6. 문서갱신: TODO·CHANGELOG·세션 로그.
 7. 큐상태: v1.1+ 마감. 릴리즈 태그는 사용자 요청 시.
 8. E2E: 출처 뱃지 링크·포착일·한글 노트 렌더 확인済.
+
+## 릴리즈
+- v1.1.0 태그 푸시 → CI/release 통과 → Release 게시 (unsigned APK, 사이닝 미설정)
+- https://github.com/BoraSarang/MacJupJup/releases/tag/v1.1.0

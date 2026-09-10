@@ -7,7 +7,14 @@
     var LICENSE_LABEL = { OSS: '오픈소스', FREE: '프리', PAID: '유료' };
     var PAGE_SIZE = 20;
 
-    var state = { view: 'timeline', license: '', tag: '', category: '', q: '', sort: 'newest', page: 1, lang: 'ko' };
+    var state = { view: 'timeline', license: '', tag: '', category: '', q: '', sort: 'newest', page: 1, lang: 'ko', collectDays: 14, collectSource: '' };
+
+    /* 현재 뷰 다시 로드 (공유 메뉴가 모든 뷰에서 동작하도록) */
+    function reloadCurrentView() {
+        if (state.view === 'watchlist') loadWatchlist();
+        else if (state.view === 'stats') loadStats();
+        else loadTimeline();
+    }
 
     /* 한/영 선택: ko 기본, 번역 없으면 원문 폴백 */
     function pick(ko, en) {
@@ -42,7 +49,7 @@
         all.className = 'chip active';
         all.type = 'button';
         all.textContent = '전체 카테고리';
-        all.onclick = function () { state.category = ''; state.page = 1; syncChips(); loadTimeline(); };
+        all.onclick = function () { state.category = ''; state.page = 1; syncChips(); reloadCurrentView(); };
         box.appendChild(all);
         CATEGORIES.forEach(function (c) {
             var b = document.createElement('button');
@@ -54,7 +61,7 @@
                 state.category = state.category === c ? '' : c;
                 state.page = 1;
                 syncChips();
-                loadTimeline();
+                reloadCurrentView();
             };
             box.appendChild(b);
         });
@@ -81,7 +88,7 @@
                 }
                 state.page = 1;
                 syncChips();
-                loadTimeline();
+                reloadCurrentView();
             };
         });
     }
@@ -135,16 +142,23 @@
     }
     function bindCards(container) {
         container.querySelectorAll('.app-card').forEach(function (el) {
+            el.setAttribute('tabindex', '0');
+            el.setAttribute('role', 'button');
             el.onclick = function () { openDetail(el.dataset.id); };
+            el.onkeydown = function (e) {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDetail(el.dataset.id); }
+            };
             // 출처 뱃지 클릭은 새탭만 (모달 방지)
             el.querySelectorAll('a[target="_blank"]').forEach(function (a) {
                 a.onclick = function (e) { e.stopPropagation(); };
+                a.onkeydown = function (e) { e.stopPropagation(); };
             });
         });
     }
 
     /* ---------- 타임라인 ---------- */
     var searchTimer = null;
+    var timelineSeq = 0;
     function query() {
         var p = new URLSearchParams({ sort: state.sort, page: state.page, pageSize: PAGE_SIZE });
         if (state.license) p.set('license', state.license);
@@ -155,8 +169,10 @@
     }
     function loadTimeline() {
         var grid = $('appGrid');
+        var seq = ++timelineSeq;
         grid.innerHTML = '<div class="empty-state">불러오는 중…</div>';
         api(query()).then(function (d) {
+            if (seq !== timelineSeq) return;
             $('visibleCount').textContent = '검색 결과 ' + d.total + '개';
             if (!d.apps.length) {
                 grid.innerHTML = '<div class="empty-state">조건에 맞는 앱이 없습니다</div>';
@@ -171,6 +187,7 @@
                 window.scrollTo(0, 0);
             });
         }).catch(function () {
+            if (seq !== timelineSeq) return;
             grid.innerHTML = '<div class="empty-state">데이터를 불러오는데 실패했습니다 (서버 미기동 시)</div>';
         });
     }
@@ -206,54 +223,172 @@
         return out;
     }
 
-    /* ---------- Watchlist (버전 업데이트) ---------- */
+    /* ---------- Watchlist (버전 업데이트, 서버 필터+페이징) ---------- */
+    function watchQuery() {
+        var p = new URLSearchParams({ sort: state.sort, page: state.page, pageSize: PAGE_SIZE, bumped: 'true' });
+        if (state.license) p.set('license', state.license);
+        if (state.tag) p.set('tag', state.tag);
+        if (state.category) p.set('category', state.category);
+        if (state.q) p.set('q', state.q);
+        return '/api/apps?' + p.toString();
+    }
     function loadWatchlist() {
         var grid = $('watchGrid');
         grid.innerHTML = '<div class="empty-state">불러오는 중…</div>';
-        api('/api/apps?sort=updated&page=1&pageSize=' + PAGE_SIZE).then(function (d) {
-            var items = d.apps.filter(function (a) { return !a.isNew && a.version; });
-            if (!items.length) {
-                grid.innerHTML = '<div class="empty-state">아직 버전 업데이트 기록이 없습니다</div>';
+        api(watchQuery()).then(function (d) {
+            if (!d.apps.length) {
+                grid.innerHTML = '<div class="empty-state">조건에 맞는 버전 업데이트가 없습니다</div>';
+                $('watchPagination').innerHTML = '';
                 return;
             }
-            grid.innerHTML = items.map(cardHtml).join('');
+            grid.innerHTML = d.apps.map(cardHtml).join('');
             bindCards(grid);
+            renderPagination($('watchPagination'), d.page, d.pageSize, d.total, function (p) {
+                state.page = p;
+                loadWatchlist();
+                window.scrollTo(0, 0);
+            });
         }).catch(function () {
             grid.innerHTML = '<div class="empty-state">데이터를 불러오는데 실패했습니다</div>';
         });
     }
 
-    /* ---------- 통계 ---------- */
+    /* ---------- 통계 (기존 섹션 우선 렌더 + 추가 섹션 독립 로드) ---------- */
     function loadStats() {
         var box = $('statsContent');
         box.innerHTML = '<div class="empty-state">통계 불러오는 중…</div>';
+        // ① 기존 섹션: 하나라도 실패하면 전체 실패 표시 (예전 동작 유지)
         api('/api/stats').then(function (s) {
             return api('/api/stats/trends').then(function (t) { return { s: s, t: t }; });
         }).then(function (r) {
-            var s = r.s, t = r.t;
-            var cats = Object.keys(t.byCategory || {}).sort(function (a, b) { return t.byCategory[b] - t.byCategory[a]; });
-            var maxCat = cats.length ? t.byCategory[cats[0]] : 1;
-            var lic = t.byLicense || {};
-            var html = '<div class="kpi-grid">' +
-                kpi(s.totalApps, '수집 앱') + kpi(s.activeSources, '활성 소스') +
-                kpi(t.newLast7d, '최근 7일 신규') + kpi(t.versionBumpsLast7d, '최근 7일 버전업') +
-                kpi(t.aiTagCount, 'AI-Agent') + kpi(t.menuBarTagCount, 'MenuBar') +
-                '</div><h3>카테고리 분포</h3>';
-            cats.forEach(function (c) {
-                var v = t.byCategory[c];
-                html += '<div class="bar-row"><span class="name">' + esc(c) + '</span>' +
-                    '<span class="bar-track"><span class="bar-fill" style="display:block;width:' +
-                    Math.round(v / maxCat * 100) + '%"></span></span>' +
-                    '<span class="cnt">' + v + '</span></div>';
-            });
-            html += '<h3>라이선스 분포</h3><div class="bar-row"><span class="name">오픈소스</span>' +
-                bar(lic.OSS || 0, s.totalApps) + '</div>' +
-                '<div class="bar-row"><span class="name">프리</span>' + bar(lic.FREE || 0, s.totalApps) + '</div>' +
-                '<div class="bar-row"><span class="name">유료</span>' + bar(lic.PAID || 0, s.totalApps) + '</div>';
-            box.innerHTML = html;
+            box.innerHTML = baseStatsHtml(r.s, r.t) +
+                '<div id="collectBox"></div>';
+            // ② 추가 섹션: 각각 독립 — 실패해도 기존 섹션은 유지
+            loadInsightsBox();
+            loadCollectBox();
         }).catch(function () {
             box.innerHTML = '<div class="empty-state">통계를 불러오는데 실패했습니다</div>';
         });
+    }
+    function baseStatsHtml(s, t) {
+        var cats = Object.keys(t.byCategory || {}).sort(function (a, b) { return t.byCategory[b] - t.byCategory[a]; });
+        var maxCat = cats.length ? t.byCategory[cats[0]] : 1;
+        var lic = t.byLicense || {};
+        var html = '<div class="kpi-grid">' +
+            kpi(s.totalApps, '수집 앱') + kpi(s.activeSources, '활성 소스') +
+            kpi(t.newLast7d, '최근 7일 신규') + kpi(t.versionBumpsLast7d, '최근 7일 버전업') +
+            kpi(t.aiTagCount, 'AI-Agent') + kpi(t.menuBarTagCount, 'MenuBar') +
+            '</div><div id="insightBox"></div><h3>카테고리 분포</h3>';
+        cats.forEach(function (c) {
+            var v = t.byCategory[c];
+            html += '<div class="bar-row"><span class="name">' + esc(c) + '</span>' +
+                '<span class="bar-track"><span class="bar-fill" style="display:block;width:' +
+                Math.round(v / maxCat * 100) + '%"></span></span>' +
+                '<span class="cnt">' + v + '</span></div>';
+        });
+        html += '<h3>라이선스 분포</h3><div class="bar-row"><span class="name">오픈소스</span>' +
+            bar(lic.OSS || 0, s.totalApps) + '</div>' +
+            '<div class="bar-row"><span class="name">프리</span>' + bar(lic.FREE || 0, s.totalApps) + '</div>' +
+            '<div class="bar-row"><span class="name">유료</span>' + bar(lic.PAID || 0, s.totalApps) + '</div>';
+        return html;
+    }
+    function loadInsightsBox() {
+        var box = $('insightBox');
+        if (!box) return;
+        api('/api/stats/insights').then(function (ins) {
+            if (!ins.insights || !ins.insights.length) return;
+            box.innerHTML = '<h3>💡 인사이트</h3><div class="insight-grid">' + ins.insights.map(function (n) {
+                return '<div class="insight-card"><div class="insight-icon">' + esc(n.icon) + '</div>' +
+                    '<div><b>' + esc(n.title) + '</b><p>' + esc(n.body) + '</p></div></div>';
+            }).join('') + '</div>';
+        }).catch(function () { /* 기존 섹션 유지, 조용히 생략 */ });
+    }
+    function loadCollectBox() {
+        var box = $('collectBox');
+        if (!box) return;
+        var days = state.collectDays;
+        api('/api/stats/collect?days=' + days).then(function (c) {
+            collectCache = c.days || [];
+            box.innerHTML = '<h3>📥 수집처별 일별 수집량 (' + days + '일)</h3>' + collectSectionHtml();
+            bindCollectSection(box);
+        }).catch(function () { /* 기존 섹션 유지, 조용히 생략 */ });
+    }
+    var collectCache = [];
+    function collectSources() {
+        var map = {};
+        collectCache.forEach(function (d) {
+            (d.bySource || []).forEach(function (s) {
+                if (!map[s.sourceId]) map[s.sourceId] = { sourceId: s.sourceId, sourceName: s.sourceName, found: 0, newCount: 0, updated: 0 };
+                map[s.sourceId].found += s.found;
+                map[s.sourceId].newCount += s['new'] || 0;
+                map[s.sourceId].updated += s.updated;
+            });
+        });
+        return Object.keys(map).map(function (k) { return map[k]; }).sort(function (a, b) { return b.found - a.found; });
+    }
+    function collectScope(day) {
+        if (!state.collectSource) {
+            return { found: day.found, newCount: day['new'] || 0, updated: day.updated, runs: day.runs, name: '전체' };
+        }
+        var hit = null;
+        (day.bySource || []).forEach(function (s) { if (s.sourceId === state.collectSource) hit = s; });
+        if (!hit) return { found: 0, newCount: 0, updated: 0, runs: 0, name: '' };
+        return { found: hit.found, newCount: hit['new'] || 0, updated: hit.updated, runs: 0, name: hit.sourceName };
+    }
+    function collectSectionHtml() {
+        var srcs = collectSources();
+        var chips = '<button type="button" data-src="" class="' + (!state.collectSource ? 'active' : '') + '">전체</button>' +
+            srcs.map(function (s) {
+                return '<button type="button" data-src="' + esc(s.sourceId) + '" class="' + (state.collectSource === s.sourceId ? 'active' : '') + '">' + esc(s.sourceName) + '</button>';
+            }).join('');
+        var table = '<table class="ver-table collect-table"><tr><th>수집처</th><th>발견</th><th>신규</th><th>갱신</th></tr>' +
+            srcs.map(function (s) {
+                return '<tr data-src="' + esc(s.sourceId) + '"><td>' + esc(s.sourceName) + '</td><td>' +
+                    s.found + '</td><td>' + s.newCount + '</td><td>' + s.updated + '</td></tr>';
+            }).join('') + '</table>';
+        return '<div class="period-row collect-srcs" id="collectSources">' + chips + '</div>' +
+            collectChart(collectCache) + table;
+    }
+    function bindCollectSection(box) {
+        function select(src) {
+            state.collectSource = src;
+            box.querySelectorAll('#collectSources button').forEach(function (b) {
+                b.classList.toggle('active', (b.dataset.src || '') === src);
+            });
+            var chart = box.querySelector('.collect-wrap');
+            if (chart) chart.innerHTML = collectChartInner(collectCache);
+        }
+        box.querySelectorAll('#collectSources button').forEach(function (b) {
+            b.onclick = function () { select(b.dataset.src || ''); };
+        });
+        box.querySelectorAll('.collect-table tr[data-src]').forEach(function (tr) {
+            tr.onclick = function () { select(tr.dataset.src); };
+        });
+    }
+    function collectChart(days) {
+        if (!days.length) return '<div class="empty-state">수집 기록이 없습니다</div>';
+        return '<div class="collect-wrap">' + collectChartInner(days) + '</div>';
+    }
+    function collectChartInner(days) {
+        var scoped = days.map(function (d) {
+            var sc = collectScope(d);
+            return { day: d.day, found: sc.found, newCount: sc.newCount, updated: sc.updated, runs: sc.runs, name: sc.name };
+        });
+        var max = 1;
+        scoped.forEach(function (d) { if (d.found > max) max = d.found; });
+        var cols = scoped.map(function (d) {
+            var hf = Math.max(2, Math.round(d.found / max * 100));
+            var hn = Math.max(d.newCount ? 2 : 0, Math.round(d.newCount / max * 100));
+            var label = String(d.day).slice(5);
+            var title = d.day + ' ' + d.name + ' — 발견 ' + d.found + ' · 신규 ' + d.newCount + ' · 갱신 ' + d.updated + (d.runs ? ' · ' + d.runs + '회' : '');
+            return '<div class="collect-day" title="' + esc(title) + '">' +
+                '<div class="collect-bars"><span class="collect-bar-new" style="height:' + hn + '%"></span>' +
+                '<span class="collect-bar-found" style="height:' + hf + '%"></span></div>' +
+                '<span class="collect-label">' + esc(label) + '</span></div>';
+        }).join('');
+        return '<div class="collect-legend"><span><i class="sw sw-found"></i>발견</span> ' +
+            '<span><i class="sw sw-new"></i>신규</span></div>' +
+            '<div class="collect-chart">' + cols + '</div>';
     }
     function kpi(n, l) {
         return '<div class="kpi"><div class="n">' + n + '</div><div class="l">' + l + '</div></div>';
@@ -282,10 +417,31 @@
         return '<section class="detail-sec"><h3>' + title + '</h3>' + inner + '</section>';
     }
     function detailHtml(a) {
-        // ① 소개 (한국어 기본 + 원문 토글)
-        var intro = pick(a.descriptionKo, a.descriptionSnippet);
-        var introHtml = intro.text
-            ? '<p data-kotext>' + esc(intro.text) + '</p>' + origBtn(a.descriptionKo, a.descriptionSnippet)
+        // ① 소개 + ④ 세부 설명 (T-073: 중복 해소. README 결합 본문은 앞/뒷부분 분리,
+        // 그 외는 ①요약 300자 / ④전문으로 분리)
+        var fullText = a.descriptionKo || a.descriptionSnippet || '';
+        var marker = '— README —';
+        var introText = '';
+        var detailBody = '';
+        if (fullText.indexOf(marker) >= 0) {
+            var parts = fullText.split(marker);
+            introText = parts[0].trim().slice(0, 300);
+            detailBody = parts.slice(1).join(marker).trim() || parts[0].trim();
+        } else if (fullText.length > 300) {
+            introText = fullText.slice(0, 300) + '…';
+            detailBody = fullText;
+        } else {
+            introText = fullText;
+            detailBody = '';
+        }
+        var introHtml = introText
+            ? '<p>' + esc(introText) + '</p>' +
+                ((a.descriptionKo && a.descriptionSnippet && a.descriptionKo !== a.descriptionSnippet)
+                    ? '<button class="orig-toggle" type="button" data-ko="' + esc(a.descriptionKo.slice(0, 300)) + '" data-en="' + esc(a.descriptionSnippet.slice(0, 300)) + '">원문보기</button>'
+                    : '')
+            : '';
+        var funcHtml = detailBody && detailBody !== introText
+            ? '<p data-kotext>' + esc(detailBody) + '</p>' + origBtn(a.descriptionKo, a.descriptionSnippet)
             : '';
         // ② 스크린샷 (Apple CDN 직접 표시)
         var shots = '';
@@ -310,45 +466,46 @@
         if (a.category) feats.push('<div>' + esc(a.category) + '</div>');
         if (a.tags) feats.push('<div>태그: ' + esc(a.tags) + '</div>');
         var feat = feats.length ? '<div class="feat-grid">' + feats.join('') + '</div>' : '';
-        // ④ 기능 (본문 — 한국어 기본 + 원문 토글)
-        var func = pick(a.descriptionKo, a.description || a.descriptionSnippet);
-        var funcHtml = func.text
-            ? '<p data-kotext>' + esc(func.text) + '</p>' + origBtn(a.descriptionKo, a.description || a.descriptionSnippet)
-            : '';
-        // ⑤ 새로운 기능 (한국어 기본 + 원문 토글)
+        // ⑤ 새로운 기능 (한국어 기본 + 원문 토글) + 버전별 링크 (T-080)
         var newsPick = pick(a.releaseNotesKo, a.releaseNotes || a.releaseNotesSummary);
         var news = '';
         var hasHistory = a.version || (a.versions && a.versions.length) || newsPick.text;
         if (hasHistory) {
             var rows = (a.versions || []).slice(0, 10).map(function (v) {
-                return '<tr><td>' + esc(v.version) + '</td><td>' + esc(v.notesSummary || '') + '</td></tr>';
+                var vlink = v.sourceUrl
+                    ? ' <a target="_blank" rel="noopener" href="' + esc(v.sourceUrl) + '">열기</a>'
+                    : '';
+                return '<tr><td>' + esc(v.version) + '</td><td>' + esc(v.notesSummary || '') + '</td><td>' + vlink + '</td></tr>';
             }).join('');
             news = (newsPick.text
                 ? '<p data-kotext>' + esc(newsPick.text) + '</p>' +
                     origBtn(a.releaseNotesKo, a.releaseNotes || a.releaseNotesSummary)
                 : '') +
-                '<table class="ver-table"><tr><th>버전</th><th>새 기능</th></tr>' +
+                '<table class="ver-table"><tr><th>버전</th><th>새 기능</th><th>링크</th></tr>' +
                 (a.version ? '<tr><td><b>' + esc(a.version) + '</b> (현재)' +
                     (a.prevVersion ? ' ← <s>' + esc(a.prevVersion) + '</s>' : '') + '</td><td>' +
-                    esc(a.releaseNotesSummary || '') + '</td></tr>' : '') + rows + '</table>';
+                    esc(a.releaseNotesSummary || '') + '</td><td></td></tr>' : '') + rows + '</table>';
         } else {
             news = '<p>버전 기록 없음 — ' + fmtDate(a.firstSeenAt) + ' 첫 포착, 다음 업데이트부터 기록됩니다.</p>';
         }
-        // ⑥⑦ 홈페이지·다운로드
-        var links = [];
-        (a.sources || []).forEach(function (s) {
-            if (s.sourceUrl) links.push('<a class="btn-link ghost" target="_blank" rel="noopener" href="' + esc(s.sourceUrl) + '">출처: ' + esc(s.sourceName) + '</a>');
-        });
-        var repo = null;
-        (a.sources || []).forEach(function (s) {
-            if (!repo && s.sourceUrl && s.sourceUrl.indexOf('github.com') >= 0) repo = s.sourceUrl;
-        });
-        var dl = '<div class="btn-row">' + links.join('') +
-            (repo ? '<a class="btn-link" target="_blank" rel="noopener" href="' + esc(repo) + '">GitHub에서 보기</a>' : '') +
-            '</div>';
+        // ⑥⑦ 홈페이지·다운로드·출처 분리 (T-070: 필드 직접 사용, 둔갑 금지)
+        var homeBtn = a.homepageUrl
+            ? '<a class="btn-link" target="_blank" rel="noopener" href="' + esc(a.homepageUrl) + '">홈페이지</a>'
+            : '';
+        var repoBtn = a.repoFullName
+            ? '<a class="btn-link" target="_blank" rel="noopener" href="https://github.com/' + esc(a.repoFullName) + '">GitHub Repo</a>'
+            : '';
+        var storeBtn = a.trackId
+            ? '<a class="btn-link" target="_blank" rel="noopener" href="https://apps.apple.com/us/app/id' + a.trackId + '">App Store (현재 버전)</a>'
+            : '';
+        var srcLinks = (a.sources || []).map(function (s) {
+            if (!s.sourceUrl) return '';
+            return '<a class="btn-link ghost" target="_blank" rel="noopener" href="' + esc(s.sourceUrl) + '">출처: ' + esc(s.sourceName) + '</a>';
+        }).join('');
+        var dl = '<div class="btn-row">' + homeBtn + repoBtn + storeBtn + srcLinks + '</div>';
         return sec('① 소개', introHtml) + sec('② 스크린샷', shots) + sec('③ 특징', feat) +
-            sec('④ 기능', funcHtml) + sec('⑤ 새로운 기능', news) +
-            sec('⑥ 홈페이지 · ⑦ 다운로드 링크', dl);
+            sec('④ 세부 설명', funcHtml) + sec('⑤ 새로운 기능', news) +
+            sec('⑥ 홈페이지 · ⑦ 다운로드 · 출처', dl);
     }
     function origBtn(koText, enText) {
         if (!koText || !enText || koText === enText) return '';
@@ -376,6 +533,7 @@
     /* ---------- 초기화 ---------- */
     function setView(v) {
         state.view = v;
+        state.page = 1;
         document.querySelectorAll('.view-tabs .tab-btn').forEach(function (b) {
             var on = b.dataset.view === v;
             b.classList.toggle('active', on);
@@ -384,6 +542,10 @@
         $('timelineSection').hidden = v !== 'timeline';
         $('watchlistSection').hidden = v !== 'watchlist';
         $('statsSection').hidden = v !== 'stats';
+        // 통계는 전역 대시보드라 목록 필터 칩을 숨김 (보이는 메뉴는 전부 동작 보장)
+        var showFilters = v !== 'stats';
+        $('licenseChips').style.display = showFilters ? '' : 'none';
+        $('categoryChips').style.display = showFilters ? '' : 'none';
         if (v === 'watchlist') loadWatchlist();
         if (v === 'stats') loadStats();
         window.scrollTo(0, 0);
@@ -391,13 +553,13 @@
     document.querySelectorAll('.view-tabs .tab-btn').forEach(function (b) {
         b.onclick = function () { setView(b.dataset.view); };
     });
-    $('sortSelect').onchange = function (e) { state.sort = e.target.value; state.page = 1; loadTimeline(); };
+    $('sortSelect').onchange = function (e) { state.sort = e.target.value; state.page = 1; reloadCurrentView(); };
     $('keyword').addEventListener('input', function (e) {
         clearTimeout(searchTimer);
         searchTimer = setTimeout(function () {
             state.q = e.target.value.trim();
             state.page = 1;
-            loadTimeline();
+            reloadCurrentView();
         }, 300);
     });
     $('logoLink').onclick = function () {
@@ -414,18 +576,49 @@
             .then(function () { toast('수집 요청됨'); })
             .catch(function () { toast('수집 요청 실패'); });
     };
+    var notifPage = 1;
+    var NOTIF_PAGE_SIZE = 20;
     $('notifBell').onclick = function () {
+        notifPage = 1;
+        openNotifCenter();
+    };
+    function openNotifCenter() {
         $('appModalTitle').textContent = '알림 센터';
         $('appModalBody').innerHTML = '<div class="empty-state">불러오는 중…</div>';
         if (typeof $('appModal').showModal === 'function') $('appModal').showModal();
-        api('/api/notifications?pageSize=20').then(function (d) {
+        api('/api/notifications?page=' + notifPage + '&pageSize=' + NOTIF_PAGE_SIZE).then(function (d) {
             if (!d.notifications.length) {
                 $('appModalBody').innerHTML = '<div class="empty-state">알림이 없습니다</div>';
                 return;
             }
-            $('appModalBody').innerHTML = d.notifications.map(function (n) {
-                return '<section class="detail-sec"><h3>' + esc(n.type) + '</h3><p>' + esc(n.summary) + '</p></section>';
+            var html = d.notifications.map(function (n) {
+                return '<section class="detail-sec" data-notif="' + n.id + '" style="cursor:pointer"><h3>' + esc(n.type) + '</h3><p>' + esc(n.summary) + '</p><small>' + fmtDate(n.createdAt) + '</small></section>';
             }).join('');
+            var pages = Math.max(1, Math.ceil((d.total || 0) / (d.pageSize || NOTIF_PAGE_SIZE)));
+            if (pages > 1) {
+                html += '<div class="pagination"><button type="button" id="notifPrev"' + (notifPage <= 1 ? ' disabled' : '') + '>‹ 이전</button>' +
+                    '<span> ' + notifPage + ' / ' + pages + ' </span>' +
+                    '<button type="button" id="notifNext"' + (notifPage >= pages ? ' disabled' : '') + '>다음 ›</button></div>';
+            }
+            $('appModalBody').innerHTML = html;
+            var prev = $('notifPrev'), next = $('notifNext');
+            if (prev) prev.onclick = function () { if (notifPage > 1) { notifPage--; openNotifCenter(); } };
+            if (next) next.onclick = function () { notifPage++; openNotifCenter(); };
+            $('appModalBody').querySelectorAll('[data-notif]').forEach(function (el) {
+                el.onclick = function () {
+                    api('/api/notifications/' + el.dataset.notif).then(function (dd) {
+                        var t = dd.detail || {};
+                        var timeHtml = '';
+                        if (t.startedAt && t.finishedAt) {
+                            var secs = Math.max(0, Math.round((t.finishedAt - t.startedAt) / 1000));
+                            timeHtml = '<p><small>수집 시작 ' + fmtDate(t.startedAt) + ' → 완료 ' + fmtDate(t.finishedAt) + ' (소요 ' + secs + '초)</small></p>';
+                        } else {
+                            timeHtml = '<p><small>발견 시각 ' + fmtDate(dd.notification.createdAt) + '</small></p>';
+                        }
+                        el.innerHTML = '<h3>' + esc(dd.notification.type) + '</h3><p>' + esc(dd.notification.summary) + '</p>' + timeHtml;
+                    });
+                };
+            });
         }).catch(function () {
             $('appModalBody').innerHTML = '<div class="empty-state">불러오기 실패</div>';
         });
@@ -433,9 +626,17 @@
     $('langToggle').onclick = function () {
         state.lang = state.lang === 'ko' ? 'en' : 'ko';
         $('langToggle').textContent = state.lang === 'ko' ? '한국어' : '원문';
-        loadTimeline();
-        if (state.view === 'watchlist') loadWatchlist();
+        reloadCurrentView();
     };
+    document.querySelectorAll('#collectPeriod button').forEach(function (b) {
+        b.onclick = function () {
+            state.collectDays = parseInt(b.dataset.days, 10) || 14;
+            document.querySelectorAll('#collectPeriod button').forEach(function (x) {
+                x.classList.toggle('active', x === b);
+            });
+            loadStats();
+        };
+    });
     $('appModalClose').onclick = function () { $('appModal').close(); };
     $('appModal').addEventListener('click', function (e) {
         if (e.target === $('appModal')) $('appModal').close();

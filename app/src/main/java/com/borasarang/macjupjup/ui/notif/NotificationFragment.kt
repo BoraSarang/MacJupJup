@@ -120,6 +120,16 @@ class NotificationFragment : Fragment() {
         return try {
             val root = Json.parseToJsonElement(item.detailJson).jsonObject
             val sb = StringBuilder()
+            // T-090: 수집 시작→완료·소요 (수집완료 타입만, 신규/버전업은 발견 시각)
+            val startedAt = root["startedAt"]?.jsonPrimitive?.content?.toLongOrNull()
+            val finishedAt = root["finishedAt"]?.jsonPrimitive?.content?.toLongOrNull()
+            val duration = TimeUtils.formatDuration(startedAt, finishedAt)
+            if (duration != null) {
+                sb.append("수집 시작: ${TimeUtils.formatAbsolute(startedAt)}\n")
+                sb.append("수집 완료: ${TimeUtils.formatAbsolute(finishedAt)} ($duration)\n")
+            } else {
+                sb.append("발견 시각: ${TimeUtils.formatAbsolute(item.createdAt)}\n")
+            }
             root["totalFound"]?.let { sb.append("전체 발견: ${it.jsonPrimitive.content}\n") }
             root["newApps"]?.let { sb.append("신규: ${it.jsonPrimitive.content}\n") }
             root["updatedApps"]?.let { sb.append("갱신: ${it.jsonPrimitive.content}\n") }

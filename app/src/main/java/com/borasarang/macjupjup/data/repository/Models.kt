@@ -48,6 +48,8 @@ data class AppFilter(
     val sort: String = "newest",
     val page: Int = 1,
     val pageSize: Int = 50,
+    /** true면 버전업(isNew=0 AND version 있음)만 */
+    val bumped: Boolean = false,
 )
 
 data class PagedApps(
@@ -62,6 +64,25 @@ data class AppListItem(
     val app: App,
     val sourceName: String?,
     val sourceUrl: String?,
+)
+
+/** 일별 수집량 (그래프용) */
+data class DayCollect(
+    val day: String,
+    val found: Long,
+    val newCount: Long,
+    val updated: Long,
+    val runs: Long,
+    val bySource: List<SourceCollect>,
+)
+
+/** 일자별 소스 수집량 */
+data class SourceCollect(
+    val sourceId: String,
+    val sourceName: String,
+    val found: Long,
+    val newCount: Long,
+    val updated: Long,
 )
 
 data class SourceStatus(

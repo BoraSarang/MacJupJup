@@ -8,12 +8,12 @@ import com.borasarang.macjupjup.crawler.itunes.ITunesNameMatcher
 import com.borasarang.macjupjup.crawler.mmb.MacMenuBarCrawler
 import com.borasarang.macjupjup.crawler.chart.ChartRssCrawler
 import com.borasarang.macjupjup.crawler.ph.ProductHuntFeedCrawler
-import com.borasarang.macjupjup.crawler.setapp.SetappSeedCrawler
+import com.borasarang.macjupjup.crawler.mas.MacStoreDiscoveryCrawler
 import com.borasarang.macjupjup.data.db.MacDatabase
 import com.borasarang.macjupjup.data.db.entity.CrawlSource
 import com.borasarang.macjupjup.util.Constants
 
-/** 소스 type으로 크롤러 구현체 분기 (7종 전부 연결됨) */
+/** 소스 type으로 크롤러 구현체 분기 (9종 전부 연결됨, Setapp 제거) */
 class CrawlerFactory(
     private val db: MacDatabase,
     private val githubToken: String = "",
@@ -24,11 +24,11 @@ class CrawlerFactory(
             Constants.TYPE_GITHUB_RELEASES -> GitHubReleasesCrawler(source, db, githubToken)
             Constants.TYPE_PH_FEED -> ProductHuntFeedCrawler(source)
             Constants.TYPE_HN_SHOW -> HnShowCrawler(source)
-            Constants.TYPE_SETAPP_SEED -> SetappSeedCrawler(source, db)
             Constants.TYPE_CHART_RSS -> ChartRssCrawler(source)
             Constants.TYPE_ITUNES_LOOKUP -> ITunesLookupPoller(source, db)
             Constants.TYPE_NAME_MATCH -> ITunesNameMatcher(source, db)
             Constants.TYPE_MACMENUBAR -> MacMenuBarCrawler(source)
+            Constants.TYPE_MAS_DISCOVERY -> MacStoreDiscoveryCrawler(source)
             else -> throw IllegalArgumentException("미지원 소스 type=${source.type}")
         }
     }

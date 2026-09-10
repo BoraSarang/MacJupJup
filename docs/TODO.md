@@ -60,6 +60,30 @@
 - [x] 포털: 아이콘 카드·한글 기본+원문 토글·풍부한 특징·알림 목록
 - [x] 단위 41/41·lint Error 0·S22 E2E + 문서
 
+## v1.2 발견망·상세표시·버전링크·알림시간 (PLAN_v1.2_discovery, 완료 2026-09-10)
+- [x] T-060 MAS 키워드 디스커버리(신규 소스, 24h): search 키워드 분할 + 시드 + 팩토리
+- [x] T-061 수동 시드 POST /api/apps/seed (trackId·이름)
+- [x] T-070 포털 ⑥⑦ 분리: 홈페이지·Repo/스토어·출처 3단 렌더
+- [x] T-071 MMB guessRepo 확장 + 플레이스홀더 중복 병합 + 테스트
+- [x] T-072 GitHub homepage 빈값 규칙 고정(테스트)
+- [x] T-073 ④기능→④세부설명 분리
+- [x] T-080 버전 릴리즈페이지 링크(DB v2→v3: version_history.sourceUrl + API + 포털)
+- [x] T-090 알림 시작→완료·소요 표시(네이티브 + 포털)
+- [x] T-100 번역 소스언어 Auto(중·일·러): ML Kit 언어감지 + gtx sl=auto + needsTranslation 게이트
+- [x] T-099 빌드·단위 45/45·lint Error 0·S22 실측 검증 + CHANGELOG·세션 로그
+
+## v1.3 Setapp 제거·포털 동작·수집그래프·인사이트 (PLAN_v1.3_portal, 완료 2026-09-10)
+- [x] T-110 Setapp 완전 제거(코드+시작시 purge: 매핑 391·앱 381·로그) + 소스 9개
+- [x] T-111 뷰별 메뉴 동작: reloadCurrentView + 와치리스트 필터 연동 + 통계 칩 숨김·기간 선택
+- [x] T-112 일별 수집량 API(collectByDay) + 그래프 + 인사이트 API·카드
+- [x] T-119 빌드·단위 45/45·lint Error 0·S22 실측 + 문서
+
+## v2.0 감사 미처리분 (완료 2026-09-10)
+- [x] T-120 서버 JSON 헬퍼 + seed 백그라운드·상태 + 재시작 백그라운드화
+- [x] T-121 DB 싱글턴 정리 + 파괴 폴백 백업 + 인덱스 v4
+- [x] T-122 포털 알림페이징·키보드·aria
+- [x] T-129 빌드·단위 54/54·lint Error 0·S22 실측 + 문서
+
 ## 완료 기준 (DoD 요약)
 
 - [x] lint Error 0, 단위/UI 테스트 통과

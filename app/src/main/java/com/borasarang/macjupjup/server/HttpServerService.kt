@@ -73,6 +73,10 @@ class HttpServerService : Service() {
     @Volatile
     private var isForeground = false
 
+    /** 수동 시드 백그라운드 상태 (idle/running/done …/not_found/error …) */
+    @Volatile
+    private var lastSeedStatus: String = "idle"
+
     private fun app(): MacJupJupApplication = application as MacJupJupApplication
 
     override fun onCreate() {
@@ -192,6 +196,7 @@ class HttpServerService : Service() {
                         pageSize = params["pageSize"]?.toIntOrNull()
                             ?.coerceIn(1, Constants.API_MAX_PAGE_SIZE)
                             ?: Constants.API_DEFAULT_PAGE_SIZE,
+                        bumped = params["bumped"]?.toBooleanStrictOrNull() ?: false,
                     )
                     val result = application.appRepository.list(filter)
                     call.respondText(
@@ -199,8 +204,7 @@ class HttpServerService : Service() {
                         ContentType.Application.Json,
                     )
                 }
-                get("/api/apps/{id}") {
-                    val id = call.parameters["id"]
+                get("/api/apps/{id}") {                    val id = call.pathId()
                     if (id.isNullOrBlank()) {
                         call.respondText(
                             """{"error":"id required"}""",
@@ -219,6 +223,79 @@ class HttpServerService : Service() {
                     } else {
                         call.respondText(detailJson(found), ContentType.Application.Json)
                     }
+                }
+                /**
+                 * T-061: 수동 시드. 차트·키워드 밖 니치 앱(SoundPaste류)을 trackId·이름으로 직접 등록.
+                 * body: {"trackId":6471012328} 또는 {"name":"SoundPaste"}
+                 * 백그라운드 실행 + 상태 조회 (요청 스레드 블로킹 제거).
+                 */
+                post("/api/apps/seed") {
+                    val json = call.receiveJsonObject()
+                    val trackId = json?.get("trackId")?.jsonPrimitive?.content?.toLongOrNull()
+                    val name = json?.get("name")?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                    if (trackId == null && name == null) {
+                        return@post call.respondError("trackId or name required")
+                    }
+                    lastSeedStatus = "running"
+                    val appRef = application
+                    scope.launch {
+                        try {
+                            val query = if (trackId != null) {
+                                com.borasarang.macjupjup.crawler.itunes.itunesLookupUrl("$trackId")
+                            } else {
+                                com.borasarang.macjupjup.crawler.itunes.itunesSearchUrl(name!!)
+                            }
+                            val resp = com.borasarang.macjupjup.crawler.CrawlHttp.get(query)
+                            if (!resp.isOk) throw IllegalStateException("iTunes HTTP ${resp.code}")
+                            val seedSource = com.borasarang.macjupjup.data.db.entity.CrawlSource(
+                                id = "manual_seed", name = "수동 시드", type = "MAS_DISCOVERY",
+                                baseUrl = "https://itunes.apple.com", enabled = true,
+                                intervalHours = 0, intervalMinutes = 0,
+                                lastRunAt = null, lastStatus = "NEVER_RUN",
+                                errorMessage = null, selectorConfigJson = null,
+                            )
+                            val parser = com.borasarang.macjupjup.crawler.mas.MacStoreDiscoveryCrawler(seedSource)
+                            // lookup/search 응답 형태 동일 → parseSearch 단일 경로
+                            val hits = parser.parseSearch(resp.body)
+                            val drafts = if (trackId != null) {
+                                hits
+                            } else {
+                                val norm = com.borasarang.macjupjup.util.MergeUtils.normalizeName(name!!)
+                                hits.filter {
+                                    com.borasarang.macjupjup.util.MergeUtils.normalizeName(it.app.name) == norm
+                                }
+                            }
+                            if (drafts.isEmpty()) {
+                                lastSeedStatus = "not_found"
+                                return@launch
+                            }
+                            val saved = appRef.appRepository.saveApps(
+                                drafts.map { it.app },
+                                drafts.flatMap { it.mappings },
+                            )
+                            com.borasarang.macjupjup.util.DebugLogger.i(
+                                "수동시드",
+                                "[FEATURE] 수동 시드 저장 created=${saved.created} updated=${saved.updated}",
+                            )
+                            lastSeedStatus = "done seeded=${drafts.size} created=${saved.created}"
+                        } catch (e: Exception) {
+                            com.borasarang.macjupjup.util.DebugLogger.e(
+                                "수동시드", "E-AND-CRAWL-0201", "시드 실패: ${e.message}", e,
+                            )
+                            lastSeedStatus = "error ${e.message}"
+                        }
+                    }
+                    call.respondText(
+                        """{"accepted":true}""",
+                        ContentType.Application.Json,
+                        HttpStatusCode.Accepted,
+                    )
+                }
+                get("/api/apps/seed/status") {
+                    call.respondText(
+                        """{"status":"${escapeJson(lastSeedStatus)}"}""",
+                        ContentType.Application.Json,
+                    )
                 }
                 get("/api/watchlist") {
                     val sources = application.sourceRepository.list()
@@ -243,7 +320,7 @@ class HttpServerService : Service() {
                     call.respondText(arr.toString(), ContentType.Application.Json)
                 }
                 post("/api/sources/{id}/toggle") {
-                    val id = call.parameters["id"]
+                    val id = call.pathId()
                     if (id.isNullOrBlank()) {
                         call.respondText(
                             """{"error":"id required"}""",
@@ -267,18 +344,14 @@ class HttpServerService : Service() {
                     }
                 }
                 post("/api/sync") {
-                    val body = try {
-                        call.receiveText()
-                    } catch (_: Exception) {
-                        ""
-                    }
-                    val sourceId = try {
-                        (Json.parseToJsonElement(body) as? JsonObject)
-                            ?.get("sourceId")?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
-                    } catch (_: Exception) {
-                        null
-                    }
+                    val sourceId = call.receiveJsonObject()
+                        ?.get("sourceId")?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
                     DebugLogger.i("수동수집", "즉시 수집 요청 sourceId=$sourceId")
+                    if (!sourceId.isNullOrBlank() &&
+                        application.sourceRepository.getById(sourceId) == null
+                    ) {
+                        return@post call.respondNotFound("unknown sourceId")
+                    }
                     application.crawlScheduler.triggerImmediate(application.database, sourceId)
                     call.respondText(
                         """{"accepted":true}""",
@@ -325,6 +398,69 @@ class HttpServerService : Service() {
                         ContentType.Application.Json,
                     )
                 }
+                /** 일별 수집량 (그래프용). ?days=7/14/30, 기본 14 */
+                get("/api/stats/collect") {
+                    val days = call.queryParameters["days"]?.toIntOrNull()?.coerceIn(1, 30) ?: 14
+                    val list = application.appRepository.collect(days)
+                    call.respondText(
+                        buildJsonObject {
+                            put("days", buildJsonArray {
+                                list.forEach { d ->
+                                    add(
+                                        buildJsonObject {
+                                            put("day", d.day)
+                                            put("found", d.found)
+                                            put("new", d.newCount)
+                                            put("updated", d.updated)
+                                            put("runs", d.runs)
+                                            put("bySource", buildJsonArray {
+                                                d.bySource.forEach { s ->
+                                                    add(
+                                                        buildJsonObject {
+                                                            put("sourceId", s.sourceId)
+                                                            put("sourceName", s.sourceName)
+                                                            put("found", s.found)
+                                                            put("new", s.newCount)
+                                                            put("updated", s.updated)
+                                                        },
+                                                    )
+                                                }
+                                            })
+                                        },
+                                    )
+                                }
+                            })
+                            put("total", buildJsonObject {
+                                put("found", list.sumOf { it.found })
+                                put("new", list.sumOf { it.newCount })
+                                put("updated", list.sumOf { it.updated })
+                            })
+                        }.toString(),
+                        ContentType.Application.Json,
+                    )
+                }
+                /** 트렌드 인사이트 카드 목록 */
+                get("/api/stats/insights") {
+                    val insights = com.borasarang.macjupjup.data.repository.buildInsights(
+                        application.appRepository.insightsInput(),
+                    )
+                    call.respondText(
+                        buildJsonObject {
+                            put("insights", buildJsonArray {
+                                insights.forEach { i ->
+                                    add(
+                                        buildJsonObject {
+                                            put("icon", i.icon)
+                                            put("title", i.title)
+                                            put("body", i.body)
+                                        },
+                                    )
+                                }
+                            })
+                        }.toString(),
+                        ContentType.Application.Json,
+                    )
+                }
                 get("/api/notifications") {
                     val params = call.queryParameters
                     val type = params["type"]?.takeIf { it.isNotBlank() }
@@ -360,7 +496,7 @@ class HttpServerService : Service() {
                     )
                 }
                 get("/api/notifications/{id}") {
-                    val id = call.parameters["id"]?.toLongOrNull()
+                    val id = call.pathIdLong()
                     val found = id?.let { application.notificationRepository.getById(it) }
                     if (found == null) {
                         call.respondText(
@@ -390,7 +526,7 @@ class HttpServerService : Service() {
                     }
                 }
                 post("/api/notifications/{id}/read") {
-                    val id = call.parameters["id"]?.toLongOrNull()
+                    val id = call.pathIdLong()
                     if (id == null) {
                         call.respondText(
                             """{"error":"id required"}""",
@@ -413,7 +549,7 @@ class HttpServerService : Service() {
                     )
                 }
                 delete("/api/notifications/{id}") {
-                    val id = call.parameters["id"]?.toLongOrNull()
+                    val id = call.pathIdLong()
                     if (id == null) {
                         call.respondText(
                             """{"error":"id required"}""",
@@ -452,33 +588,14 @@ class HttpServerService : Service() {
                     call.respondText(settingsJson(s.toView()), ContentType.Application.Json)
                 }
                 post("/api/settings") {
-                    val body = try {
-                        call.receiveText()
-                    } catch (_: Exception) {
-                        ""
-                    }
-                    val obj = try {
-                        Json.parseToJsonElement(body) as? JsonObject
-                    } catch (_: Exception) {
-                        null
-                    }
+                    val obj = call.receiveJsonObject()
                     if (obj == null) {
-                        call.respondText(
-                            """{"error":"E-AND-VALID-0501"}""",
-                            ContentType.Application.Json,
-                            HttpStatusCode.BadRequest,
-                        )
-                        return@post
+                        return@post call.respondError("E-AND-VALID-0501")
                     }
                     val current = application.preferences.getSettings()
                     val port = obj["port"]?.jsonPrimitive?.content?.toIntOrNull() ?: current.port
                     if (port !in Constants.MIN_PORT..Constants.MAX_PORT) {
-                        call.respondText(
-                            """{"error":"E-AND-VALID-0502"}""",
-                            ContentType.Application.Json,
-                            HttpStatusCode.BadRequest,
-                        )
-                        return@post
+                        return@post call.respondError("E-AND-VALID-0502")
                     }
                     val tokenRaw = obj["githubToken"]?.jsonPrimitive?.content
                     val next = SettingsData(
@@ -505,8 +622,9 @@ class HttpServerService : Service() {
                         DebugLogger.i("설정", "GitHub 토큰 저장됨 (${maskToken(tokenRaw)})")
                     }
                     if (next.port != currentPort) {
-                        DebugLogger.i("설정", "포트 변경 감지 — 서버 재시작")
-                        restartServer()
+                        DebugLogger.i("설정", "포트 변경 감지 — 서버 재시작 예약")
+                        // 라우트 스레드 블로킹(stop 최대 3s) 방지: 백그라운드 재시작
+                        scope.launch { restartServer() }
                     }
                     call.respondText(settingsJson(next.toView()), ContentType.Application.Json)
                 }
@@ -520,9 +638,12 @@ class HttpServerService : Service() {
         contentType: ContentType,
     ) {
         try {
-            val bytes = applicationContext.assets.open(assetPath).use { it.readBytes() }
+            val bytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                applicationContext.assets.open(assetPath).use { it.readBytes() }
+            }
             call.respondBytes(bytes, contentType)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            DebugLogger.w("서버", "에셋 서빙 실패 $assetPath: ${e.message}")
             call.respondText("Not found", ContentType.Text.Plain, HttpStatusCode.NotFound)
         }
     }
@@ -626,12 +747,11 @@ class HttpServerService : Service() {
         return buildJsonObject {
             put("apps", buildJsonArray {
                 items.forEach { item ->
-                    val el = appElement(item.app) as kotlinx.serialization.json.JsonObject
                     add(
                         buildJsonObject {
-                            el.entries.forEach { (key, value) -> put(key, value) }
-                            item.sourceName?.let { put("sourceName", it) }
-                            item.sourceUrl?.let { put("sourceUrl", it) }
+                            appElement(item.app).entries.forEach { (key, value) -> put(key, value) }
+                            putIfNotNull("sourceName", item.sourceName)
+                            putIfNotNull("sourceUrl", item.sourceUrl)
                         },
                     )
                 }
@@ -644,10 +764,8 @@ class HttpServerService : Service() {
 
     private fun detailJson(item: AppWithSourceList): String {
         return buildJsonObject {
-            appElement(item.app).let { el ->
-                (el as kotlinx.serialization.json.JsonObject).entries.forEach { (key, value) ->
-                    put(key, value)
-                }
+            appElement(item.app).entries.forEach { (key, value) ->
+                put(key, value)
             }
             put("sources", buildJsonArray {
                 item.sources.forEach { s ->
@@ -666,6 +784,7 @@ class HttpServerService : Service() {
                             put("version", v.version)
                             put("detectedAt", v.detectedAt)
                             v.notesSummary?.let { put("notesSummary", it) }
+                            v.sourceUrl?.let { put("sourceUrl", it) }
                         },
                     )
                 }
@@ -674,7 +793,7 @@ class HttpServerService : Service() {
     }
 
     /** 목록·상세 공통 앱 필드 (상세 7섹션 매핑 포함) */
-    private fun appElement(a: com.borasarang.macjupjup.data.db.entity.App): kotlinx.serialization.json.JsonElement {
+    private fun appElement(a: com.borasarang.macjupjup.data.db.entity.App): kotlinx.serialization.json.JsonObject {
         return buildJsonObject {
             put("id", a.id)
             put("platform", a.platform)
@@ -684,35 +803,35 @@ class HttpServerService : Service() {
             put("price", a.price)
             put("currency", a.currency)
             put("category", a.category)
-            a.tags?.let { put("tags", it) }
-            a.trackId?.let { put("trackId", it) }
-            a.repoFullName?.let { put("repoFullName", it) }
-            a.homepageUrl?.let { put("homepageUrl", it) }
-            a.version?.let { put("version", it) }
-            a.prevVersion?.let { put("prevVersion", it) }
+            putIfNotNull("tags", a.tags)
+            putIfNotNull("trackId", a.trackId)
+            putIfNotNull("repoFullName", a.repoFullName)
+            putIfNotNull("homepageUrl", a.homepageUrl)
+            putIfNotNull("version", a.version)
+            putIfNotNull("prevVersion", a.prevVersion)
             // ⑤ 새로운 기능: 요약 + 원문은 버전 히스토리/출처 링크로
-            a.releaseNotesSummary?.let { put("releaseNotesSummary", it) }
-            a.releaseNotes?.let { put("releaseNotes", it) }
-            a.releaseNotesKo?.let { put("releaseNotesKo", it) }
-            a.releaseDate?.let { put("releaseDate", it) }
+            putIfNotNull("releaseNotesSummary", a.releaseNotesSummary)
+            putIfNotNull("releaseNotes", a.releaseNotes)
+            putIfNotNull("releaseNotesKo", a.releaseNotesKo)
+            putIfNotNull("releaseDate", a.releaseDate)
             // ① 소개 발췌 / ② 스크린샷(CDN 직접 표시)
-            a.descriptionSnippet?.let { put("descriptionSnippet", it) }
-            a.descriptionKo?.let { put("descriptionKo", it) }
-            a.screenshotUrls?.let { put("screenshotUrls", it) }
-            a.iconUrl?.let { put("iconUrl", it) }
+            putIfNotNull("descriptionSnippet", a.descriptionSnippet)
+            putIfNotNull("descriptionKo", a.descriptionKo)
+            putIfNotNull("screenshotUrls", a.screenshotUrls)
+            putIfNotNull("iconUrl", a.iconUrl)
             // ③ 특징
-            a.averageRating?.let { put("averageRating", it) }
-            a.ratingCount?.let { put("ratingCount", it) }
-            a.stars?.let { put("stars", it) }
-            a.primaryLanguage?.let { put("primaryLanguage", it) }
-            a.topics?.let { put("topics", it) }
-            a.sellerName?.let { put("sellerName", it) }
-            a.fileSize?.let { put("fileSize", it) }
-            a.minOs?.let { put("minOs", it) }
-            a.contentRating?.let { put("contentRating", it) }
-            a.forks?.let { put("forks", it) }
-            a.issues?.let { put("issues", it) }
-            a.licenseName?.let { put("licenseName", it) }
+            putIfNotNull("averageRating", a.averageRating)
+            putIfNotNull("ratingCount", a.ratingCount)
+            putIfNotNull("stars", a.stars)
+            putIfNotNull("primaryLanguage", a.primaryLanguage)
+            putIfNotNull("topics", a.topics)
+            putIfNotNull("sellerName", a.sellerName)
+            putIfNotNull("fileSize", a.fileSize)
+            putIfNotNull("minOs", a.minOs)
+            putIfNotNull("contentRating", a.contentRating)
+            putIfNotNull("forks", a.forks)
+            putIfNotNull("issues", a.issues)
+            putIfNotNull("licenseName", a.licenseName)
             put("firstSeenAt", a.firstSeenAt)
             put("lastUpdatedAt", a.lastUpdatedAt)
             put("isNew", a.isNew)
@@ -740,6 +859,55 @@ class HttpServerService : Service() {
             .replace("\n", "\\n")
             .replace("\r", "\\r")
     }
+
+    /** 에러 envelope 단일 진실 (H-1). 성공 응답은 respondText 직접 사용 */
+    private suspend fun io.ktor.server.application.ApplicationCall.respondError(
+        msg: String,
+        status: io.ktor.http.HttpStatusCode = io.ktor.http.HttpStatusCode.BadRequest,
+    ) {
+        respondText(
+            """{"error":"${escapeJson(msg)}"}""",
+            ContentType.Application.Json,
+            status,
+        )
+    }
+
+    private suspend fun io.ktor.server.application.ApplicationCall.respondNotFound(
+        msg: String = "Not found",
+    ) = respondError(msg, io.ktor.http.HttpStatusCode.NotFound)
+
+/** nullable put 단일 진실 (H-4). appElement 25연타 축소용 */
+private fun kotlinx.serialization.json.JsonObjectBuilder.putIfNotNull(key: String, value: String?) {
+    value?.let { put(key, it) }
+}
+
+private fun kotlinx.serialization.json.JsonObjectBuilder.putIfNotNull(key: String, value: Long?) {
+    value?.let { put(key, it) }
+}
+
+private fun kotlinx.serialization.json.JsonObjectBuilder.putIfNotNull(key: String, value: Double?) {
+    value?.let { put(key, it) }
+}
+
+private fun kotlinx.serialization.json.JsonObjectBuilder.putIfNotNull(key: String, value: Int?) {
+    value?.let { put(key, it) }
+}
+
+    /** 요청 바디 JSON 파싱 단일 진실 (H-2). 실패 시 null */
+    private suspend fun io.ktor.server.application.ApplicationCall.receiveJsonObject(): JsonObject? {
+        return try {
+            Json.parseToJsonElement(receiveText()) as? JsonObject
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /** 경로 파라미터 id 단일 진실 (H-3). 비어 있으면 null */
+    private fun io.ktor.server.application.ApplicationCall.pathId(): String? =
+        parameters["id"]?.takeIf { it.isNotBlank() }
+
+    private fun io.ktor.server.application.ApplicationCall.pathIdLong(): Long? =
+        parameters["id"]?.toLongOrNull()
 
     companion object {
         const val ACTION_RESTART = "com.borasarang.macjupjup.RESTART_SERVER"

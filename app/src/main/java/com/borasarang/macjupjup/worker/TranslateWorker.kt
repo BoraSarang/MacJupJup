@@ -37,10 +37,10 @@ class TranslateWorker(
                 }
                 val descKo = a.descriptionSnippet
                     ?.takeIf { a.descriptionKo == null }
-                    ?.let { MacTranslator.translateEnToKo(it) }
+                    ?.let { MacTranslator.translateAutoToKo(it) }
                 val notesKo = (a.releaseNotes ?: a.releaseNotesSummary)
                     ?.takeIf { a.releaseNotesKo == null }
-                    ?.let { MacTranslator.translateEnToKo(it) }
+                    ?.let { MacTranslator.translateAutoToKo(it) }
                 if (descKo != null || notesKo != null) {
                     app.database.appDao().updateKo(a.id, descKo, notesKo)
                     done++

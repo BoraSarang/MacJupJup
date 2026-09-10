@@ -3,6 +3,7 @@ package com.borasarang.macjupjup.crawler.github
 import com.borasarang.macjupjup.crawler.AppDraft
 import com.borasarang.macjupjup.crawler.AppSourceMappingHelper
 import com.borasarang.macjupjup.crawler.BaseCrawler
+import com.borasarang.macjupjup.crawler.str
 import com.borasarang.macjupjup.data.db.MacDatabase
 import com.borasarang.macjupjup.data.db.entity.CrawlSource
 import com.borasarang.macjupjup.util.DebugLogger
@@ -31,11 +32,7 @@ class GitHubReleasesCrawler(
     ) : this(source, { db.appDao().getReposForReleaseCheck(maxRepos) }, token, maxRepos)
 
     override suspend fun crawl(): Result<List<AppDraft>> = runCatching {
-        val headers = buildMap {
-            put("Accept", "application/vnd.github+json")
-            put("X-GitHub-Api-Version", "2022-11-28")
-            if (token.isNotBlank()) put("Authorization", "Bearer $token")
-        }
+        val headers = githubHeaders(token)
         val targets = repoProvider().take(maxRepos)
         val drafts = mutableListOf<AppDraft>()
         var bumped = 0
@@ -86,7 +83,7 @@ class GitHubReleasesCrawler(
         val arr = try {
             Json.parseToJsonElement(body).jsonArray
         } catch (_: Exception) {
-            throw IllegalStateException("GitHub Releases 응답 파싱 실패 (E-AND-CRAWL-0201)")
+            parseFail("GitHub Releases 응답")
         }
         if (arr.isEmpty()) return null
         val o = arr[0].jsonObject

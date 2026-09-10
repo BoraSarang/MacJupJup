@@ -22,3 +22,13 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
         db.execSQL("ALTER TABLE apps ADD COLUMN licenseName TEXT")
     }
 }
+
+/**
+ * v2 → v3 (T-080): 버전별 링크. version_history.sourceUrl 추가.
+ * GitHub bump → 릴리즈 페이지, Lookup bump → 스토어 현재 페이지. nullable → 기존 행 영향 없음.
+ */
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE version_history ADD COLUMN sourceUrl TEXT")
+    }
+}

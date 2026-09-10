@@ -2,8 +2,8 @@ package com.borasarang.macjupjup.crawler.ph
 
 import com.borasarang.macjupjup.crawler.AppDraft
 import com.borasarang.macjupjup.crawler.BaseCrawler
+import com.borasarang.macjupjup.crawler.splitTitle
 import com.borasarang.macjupjup.data.db.entity.CrawlSource
-import com.borasarang.macjupjup.util.DebugLogger
 import org.jsoup.Jsoup
 import org.jsoup.parser.Parser
 
@@ -19,19 +19,8 @@ class ProductHuntFeedCrawler(
 ) : BaseCrawler(source) {
 
     override suspend fun crawl(): Result<List<AppDraft>> = runCatching {
-        val drafts = mutableListOf<AppDraft>()
-        for (feed in feeds) {
-            try {
-                val body = fetchGet(feed)
-                drafts += parseFeed(body)
-            } catch (e: Exception) {
-                DebugLogger.w("수집", "PH 피드 스킵 $feed: ${e.message}")
-            }
-            politenessDelay()
-        }
-        val seen = mutableSetOf<String>()
-        drafts.filter { seen.add(it.app.id) }.also {
-            DebugLogger.i("수집", "Product Hunt 완료 feeds=${feeds.size} found=${drafts.size} unique=${it.size}")
+        crawlEach(feeds, "Product Hunt") { feed ->
+            parseFeed(fetchGet(feed))
         }
     }
 
@@ -39,7 +28,7 @@ class ProductHuntFeedCrawler(
         val doc = try {
             Jsoup.parse(body, "", Parser.xmlParser())
         } catch (_: Exception) {
-            throw IllegalStateException("PH 피드 파싱 실패 (E-AND-CRAWL-0201)")
+            parseFail("PH 피드")
         }
         return doc.select("entry").mapNotNull { e ->
             try {
@@ -50,11 +39,11 @@ class ProductHuntFeedCrawler(
                 val author = e.selectFirst("author > name")?.text()?.trim().orEmpty()
                 val categories = e.select("category").map { it.attr("term").trim() }
                     .filter { it.isNotBlank() }
-                if (!isMacRelated("$title $summary ${categories.joinToString(" ")}")) {
+                if (!com.borasarang.macjupjup.crawler.isMacRelated("$title $summary ${categories.joinToString(" ")}", PH_EXTRA_KEYWORDS)) {
                     return@mapNotNull null
                 }
                 // PH 제목 관례: "이름 — 태그라인" (공백 포함 구분자만 분리)
-                val name = title.split(" — ", " – ", " | ", " - ").first().trim().ifBlank { title }
+                val name = splitTitle(title)
                 buildDraft(
                     name = name,
                     developer = author.ifBlank { "Product Hunt" },
@@ -69,20 +58,16 @@ class ProductHuntFeedCrawler(
     }
 
     companion object {
+        // 토픽 피드 2종은 404로 폐쇄됨(2026-09 확인) — 전체 피드만 수집
         val DEFAULT_FEEDS = listOf(
             "https://www.producthunt.com/feed",
-            "https://www.producthunt.com/topics/mac/feed",
-            "https://www.producthunt.com/topics/developer-tools/feed",
         )
 
-        private val MAC_KEYWORDS = listOf(
-            "mac", "macos", "mac os", "menu bar", "menubar", "mac app",
-            "apple silicon", "notch", "raycast", "macbook", "imac",
-        )
+        /** 공통 7종 외 PH 전용 키워드 */
+        private val PH_EXTRA_KEYWORDS = setOf("apple silicon", "raycast", "macbook", "imac")
 
-        fun isMacRelated(text: String): Boolean {
-            val hay = " $text ".lowercase()
-            return MAC_KEYWORDS.any { hay.contains(it) }
-        }
+        /** 호환 유지: 기존 1인자 시그니처 (테스트·외부 호출용) */
+        fun isMacRelated(text: String): Boolean =
+            com.borasarang.macjupjup.crawler.isMacRelated(text, PH_EXTRA_KEYWORDS)
     }
 }

@@ -6,7 +6,6 @@ import com.borasarang.macjupjup.data.db.entity.CrawlSource
 import com.borasarang.macjupjup.util.AppTag
 import com.borasarang.macjupjup.util.CategoryInfer
 import com.borasarang.macjupjup.util.Constants
-import com.borasarang.macjupjup.util.DebugLogger
 import org.jsoup.Jsoup
 import org.jsoup.parser.Parser
 import java.time.ZonedDateTime
@@ -27,18 +26,8 @@ class MacMenuBarCrawler(
 ) : BaseCrawler(source) {
 
     override suspend fun crawl(): Result<List<AppDraft>> = runCatching {
-        val drafts = mutableListOf<AppDraft>()
-        for (feed in feeds) {
-            try {
-                drafts += parseFeed(fetchGet(feed))
-            } catch (e: Exception) {
-                DebugLogger.w("수집", "MacMenuBar 피드 스킵 $feed: ${e.message}")
-            }
-            politenessDelay()
-        }
-        val seen = mutableSetOf<String>()
-        drafts.filter { seen.add(it.app.id) }.also {
-            DebugLogger.i("수집", "MacMenuBar 완료 feeds=${feeds.size} found=${drafts.size} unique=${it.size}")
+        crawlEach(feeds, "MacMenuBar") { feed ->
+            parseFeed(fetchGet(feed))
         }
     }
 
@@ -46,7 +35,7 @@ class MacMenuBarCrawler(
         val doc = try {
             Jsoup.parse(body, "", Parser.xmlParser())
         } catch (_: Exception) {
-            throw IllegalStateException("MacMenuBar 피드 파싱 실패 (E-AND-CRAWL-0201)")
+            parseFail("MacMenuBar 피드")
         }
         return doc.select("item").mapNotNull { e ->
             try {
@@ -122,16 +111,30 @@ class MacMenuBarCrawler(
             return desc.replace(Regex("\\s*(Visit|Watch)\\s*$"), "").trim().ifBlank { null }
         }
 
-        /** owner.github.io/repo 형태 Visit 링크 → owner/repo 추정 */
+        /** owner.github.io/repo 형태 Visit 링크 → owner/repo 추정.
+         *  github.com/owner/repo 직접 링크도 인식 (T-071).
+         *  그 외 호스트(자사 도메인·MAS 등)는 null = 홈페이지로만 사용. */
         fun guessRepo(url: String): String? {
             return try {
                 val u = java.net.URI(url)
                 val host = u.host ?: return null
-                if (!host.endsWith(".github.io")) return null
-                val owner = host.removeSuffix(".github.io")
-                val repo = u.path.trim('/').substringBefore('/').ifBlank { return null }
-                if (owner.isBlank() || repo.isBlank()) return null
-                "$owner/$repo"
+                if (host.endsWith(".github.io")) {
+                    val owner = host.removeSuffix(".github.io")
+                    val repo = u.path.trim('/').substringBefore('/').ifBlank { return null }
+                    if (owner.isBlank() || repo.isBlank()) return null
+                    return "$owner/$repo"
+                }
+                if (host.equals("github.com", ignoreCase = true)) {
+                    val segs = u.path.trim('/').split('/').filter { it.isNotBlank() }
+                    if (segs.size < 2) return null
+                    val owner = segs[0]
+                    val repo = segs[1].removeSuffix(".git")
+                    if (owner.isBlank() || repo.isBlank()) return null
+                    if (!owner.matches(Regex("[A-Za-z0-9_.-]+"))) return null
+                    if (!repo.matches(Regex("[A-Za-z0-9_.-]+"))) return null
+                    return "$owner/$repo"
+                }
+                null
             } catch (_: Exception) {
                 null
             }

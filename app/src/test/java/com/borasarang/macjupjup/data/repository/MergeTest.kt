@@ -83,4 +83,14 @@ class MergeTest {
         assertEquals(false, merged.isNew)
         assertNull(merged.prevVersion)
     }
+
+    @Test
+    fun `버전bump_NEW해제`() {
+        val merged = repo.mergeApps(
+            app(id = "x", version = "1.0").copy(isNew = true),
+            app(id = "x", version = "2.0"),
+        )
+        assertEquals(false, merged.isNew)
+        assertEquals("1.0", merged.prevVersion)
+    }
 }

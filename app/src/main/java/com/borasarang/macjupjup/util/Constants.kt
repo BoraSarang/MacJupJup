@@ -15,6 +15,10 @@ object Constants {
     const val API_MAX_PAGE_SIZE = 100
     const val API_DEFAULT_PAGE_SIZE = 50
 
+    /** 본문 절단 정책: 요약 500자 / 전문 2000자 (크롤러 공통) */
+    const val MAX_SUMMARY_LEN = 500
+    const val MAX_BODY_LEN = 2000
+
     const val CRAWL_REQUEST_DELAY_MS = 1000L
     const val CRAWL_TIMEOUT_SEC = 30L
     const val USER_AGENT = "MacJupJup/0.1 (Linux; Android) Mac-App-Trend-Portal; contact leeborasarang@gmail.com"
@@ -28,22 +32,22 @@ object Constants {
     const val SOURCE_GITHUB_RELEASES = "github_releases"
     const val SOURCE_PRODUCTHUNT = "producthunt"
     const val SOURCE_HN_SHOW = "hn_show"
-    const val SOURCE_SETAPP_SEED = "setapp_seed"
     const val SOURCE_CHART_RSS = "chart_rss"
     const val SOURCE_ITUNES_LOOKUP = "itunes_lookup"
     const val SOURCE_NAME_MATCH = "name_match"
     const val SOURCE_MACMENUBAR = "macmenubar"
+    const val SOURCE_MAS_DISCOVERY = "mas_discovery"
 
     // 소스 타입
     const val TYPE_GITHUB_SEARCH = "GITHUB_SEARCH"
     const val TYPE_GITHUB_RELEASES = "GITHUB_RELEASES"
     const val TYPE_PH_FEED = "PH_FEED"
     const val TYPE_HN_SHOW = "HN_SHOW"
-    const val TYPE_SETAPP_SEED = "SETAPP_SEED"
     const val TYPE_CHART_RSS = "CHART_RSS"
     const val TYPE_ITUNES_LOOKUP = "ITUNES_LOOKUP"
     const val TYPE_NAME_MATCH = "NAME_MATCH"
     const val TYPE_MACMENUBAR = "MACMENUBAR"
+    const val TYPE_MAS_DISCOVERY = "MAS_DISCOVERY"
 
     // 수집 상태
     const val STATUS_NEVER_RUN = "NEVER_RUN"

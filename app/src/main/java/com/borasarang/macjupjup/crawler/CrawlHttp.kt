@@ -5,7 +5,6 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
-import java.net.URLEncoder
 import java.util.zip.GZIPInputStream
 
 /** JDK HttpURLConnection 기반 얇은 HTTP 계층. 브라우저 UA + gzip + 선택 헤더 */
@@ -30,35 +29,6 @@ object CrawlHttp {
                 setRequestProperty("Accept-Language", "en-US,en;q=0.9")
                 setRequestProperty("Accept-Encoding", "gzip")
                 headers.forEach { (k, v) -> setRequestProperty(k, v) }
-            }
-            readResult(connection)
-        } finally {
-            connection?.disconnect()
-        }
-    }
-
-    fun postForm(
-        url: String,
-        params: Map<String, String>,
-        timeoutSec: Long = Constants.CRAWL_TIMEOUT_SEC,
-    ): HttpResult {
-        var connection: HttpURLConnection? = null
-        return try {
-            val body = params.entries.joinToString("&") { (k, v) ->
-                "${URLEncoder.encode(k, "UTF-8")}=${URLEncoder.encode(v, "UTF-8")}"
-            }.toByteArray(Charsets.UTF_8)
-            connection = (URL(url).openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                doOutput = true
-                connectTimeout = (timeoutSec * 1000).toInt()
-                readTimeout = (timeoutSec * 1000).toInt()
-                instanceFollowRedirects = true
-                setRequestProperty("User-Agent", Constants.USER_AGENT)
-                setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
-                setRequestProperty("Accept", "application/json, text/html, */*")
-                setRequestProperty("Accept-Encoding", "gzip")
-                setRequestProperty("Content-Length", body.size.toString())
-                outputStream.use { it.write(body) }
             }
             readResult(connection)
         } finally {

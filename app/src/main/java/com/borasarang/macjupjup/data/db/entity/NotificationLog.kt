@@ -14,6 +14,7 @@ import kotlinx.serialization.json.put
         Index("type"),
         Index("createdAt"),
         Index("isRead"),
+        Index(value = ["type", "isRead", "createdAt"]),
     ]
 )
 data class NotificationLog(

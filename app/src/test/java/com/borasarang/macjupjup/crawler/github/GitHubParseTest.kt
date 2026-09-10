@@ -43,6 +43,21 @@ class GitHubParseTest {
     }
 
     @Test
+    fun `homepage_빈값은null_실값유지_T072`() {
+        val drafts = GitHubSearchCrawler(source).parseRepos(searchJson)
+        // homepage "" / null → repo URL로 둔갑 금지, 공란 유지
+        assertNull(drafts[0].app.homepageUrl)
+        assertNull(drafts[1].app.homepageUrl)
+        val withHome = GitHubSearchCrawler(source).parseRepos(
+            """{"total_count":1,"items":[{"full_name":"aliyar/FetchBar","name":"FetchBar",
+            "owner":{"login":"aliyar"},"description":"d","stargazers_count":10,
+            "html_url":"https://github.com/aliyar/FetchBar",
+            "homepage":"https://fetchbar.greatpixels.com/","default_branch":"main"}]}""",
+        )
+        assertEquals("https://fetchbar.greatpixels.com/", withHome[0].app.homepageUrl)
+    }
+
+    @Test
     fun `releases_최신태그`() {
         val body = """[{"tag_name":"v1.2.0","draft":false,
           "body":"새 기능 추가","html_url":"https://github.com/o/r/releases/tag/v1.2.0"},

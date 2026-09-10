@@ -59,12 +59,21 @@ class MacMenuBarParseTest {
     }
 
     @Test
-    fun `repo추정_githubio만`() {
+    fun `repo추정_githubio_githubcom_T071`() {
         assertEquals(
             "yudaotor/lyrimuse",
             MacMenuBarCrawler.guessRepo("https://yudaotor.github.io/lyrimuse/"),
         )
+        assertEquals(
+            "aliyar/FetchBar",
+            MacMenuBarCrawler.guessRepo("https://github.com/aliyar/FetchBar"),
+        )
+        assertEquals(
+            "aliyar/FetchBar",
+            MacMenuBarCrawler.guessRepo("https://github.com/aliyar/FetchBar.git"),
+        )
         assertNull(MacMenuBarCrawler.guessRepo("https://linkflick.com/"))
+        assertNull(MacMenuBarCrawler.guessRepo("https://github.com/onlyowner"))
         assertNull(MacMenuBarCrawler.guessRepo("not a url"))
     }
 }

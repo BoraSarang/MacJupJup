@@ -88,4 +88,7 @@ class SourceRepository(private val db: MacDatabase) {
 
     suspend fun recentLogs(limit: Int = 50) =
         db.crawlLogDao().recent(limit).map { it.toRecent() }
+
+    /** 수집처 완전 제거 (행 삭제). 반환 = 삭제 행 수 */
+    suspend fun removeSource(id: String): Int = db.crawlSourceDao().deleteById(id)
 }
