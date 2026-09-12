@@ -103,6 +103,12 @@
 - [x] T-150 번역 처리율 상향 (주기 6h→3h·회당 30→100건·REPLACE 교체) + 포털 수동 번역 버튼
 - [ ] T-149 포털 눈확인 (마크다운 렌더·토글·Watchlist 탭·🌐 버튼)
 
+## v1.7 웹 포털 모바일 대응 (PLAN_v1.7_mobile, 진행 중)
+- [x] T-170 헤더 컴팩트: filterPanel 구조 + ☰ 필터 토글 (index.html/app.js)
+- [x] T-171 모바일 CSS 640px: sticky 상단바만 + 칩 1줄 스크롤 + 44px 터치 + 모달 시트 (style.css)
+- [x] T-172 reduced-motion·aria-expanded·수평넘침 차단 + 데스크탑 회귀 없음
+- [ ] T-179 S22 실기 포털 눈확인 (접힘 기본·펼침·탭·칩스크롤·모달시트) + 세션 로그
+
 ## 완료 기준 (DoD 요약)
 
 - [x] lint Error 0, 단위/UI 테스트 통과

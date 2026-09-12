@@ -211,6 +211,53 @@
         });
     }
 
+    /* ---------- 모바일 필터 패널 (v1.7: 상단바만 sticky, 필터 접기식) ---------- */
+    var filterCollapsed = true;
+    function isMobileWidth() {
+        return window.matchMedia && window.matchMedia('(max-width: 640px)').matches;
+    }
+    function applyFilterPanel(showFilters) {
+        var panel = $('filterPanel');
+        var toggle = $('filterToggle');
+        if (!panel) return;
+        if (!showFilters) {
+            panel.hidden = true;
+        } else {
+            panel.hidden = isMobileWidth() ? filterCollapsed : false;
+        }
+        if (toggle) {
+            toggle.setAttribute('aria-expanded', panel.hidden ? 'false' : 'true');
+            toggle.textContent = panel.hidden ? '☰ 필터' : '✕ 닫기';
+        }
+    }
+    function bindFilterToggle() {
+        var toggle = $('filterToggle');
+        var panel = $('filterPanel');
+        if (!toggle || !panel) return;
+        filterCollapsed = isMobileWidth();
+        panel.hidden = filterCollapsed && isMobileWidth();
+        toggle.setAttribute('aria-expanded', panel.hidden ? 'false' : 'true');
+        toggle.textContent = panel.hidden ? '☰ 필터' : '✕ 닫기';
+        toggle.onclick = function () {
+            filterCollapsed = !panel.hidden;
+            panel.hidden = !panel.hidden;
+            toggle.setAttribute('aria-expanded', panel.hidden ? 'false' : 'true');
+            toggle.textContent = panel.hidden ? '☰ 필터' : '✕ 닫기';
+        };
+        if (window.matchMedia) {
+            window.matchMedia('(max-width: 640px)').addEventListener('change', function (e) {
+                // 데스크탑 전환 시 항상 펼침, 모바일 복귀 시 접힘 상태 복원
+                if (!e.matches) {
+                    if (state.view !== 'stats') panel.hidden = false;
+                } else {
+                    if (state.view !== 'stats') panel.hidden = filterCollapsed;
+                }
+                toggle.setAttribute('aria-expanded', panel.hidden ? 'false' : 'true');
+                toggle.textContent = panel.hidden ? '☰ 필터' : '✕ 닫기';
+            });
+        }
+    }
+
     /* ---------- 카드 ---------- */
     function licensePill(a) {
         var cls = a.license === 'OSS' ? 'oss' : a.license === 'PAID' ? 'paid' : 'free';
@@ -665,8 +712,7 @@
         $('statsSection').hidden = v !== 'stats';
         // 통계는 전역 대시보드라 목록 필터 칩을 숨김 (보이는 메뉴는 전부 동작 보장)
         var showFilters = v !== 'stats';
-        $('licenseChips').style.display = showFilters ? '' : 'none';
-        $('categoryChips').style.display = showFilters ? '' : 'none';
+        applyFilterPanel(showFilters);
         if (v === 'watchlist') loadWatchlist();
         if (v === 'stats') loadStats();
         window.scrollTo(0, 0);
@@ -784,6 +830,7 @@
 
     buildCategoryChips();
     bindLicenseTags();
+    bindFilterToggle();
     syncChips();
     loadHeader();
     loadTimeline();

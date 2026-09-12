@@ -18,8 +18,10 @@
                 <button id="notifBell" class="btn-notif" type="button" aria-label="알림 센터 열기">
                     <span aria-hidden="true">🔔</span>
                 </button>
+                <button id="filterToggle" class="btn-filter" type="button" aria-controls="filterPanel" aria-expanded="false" title="필터 펼치기">☰ 필터</button>
             </div>
         </div>
+        <div id="filterPanel">
         <nav class="top-nav" aria-label="포털 메뉴">
             <div class="view-tabs" role="tablist" aria-label="보기 전환">
                 <button class="tab-btn active" data-view="timeline" type="button" role="tab" aria-selected="true">타임라인</button>
@@ -37,6 +39,7 @@
             <button class="chip chip-tag" data-tag="MenuBar" type="button">MenuBar</button>
         </div>
         <div class="chip-row chip-scroll" id="categoryChips" aria-label="카테고리 필터"></div>
+        </div>
     </header>
 
     <main class="main">

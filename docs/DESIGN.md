@@ -59,7 +59,13 @@ main
 │   ├─ ⑥ 홈페이지: homepageUrl 버튼 (없으면 생략, repo로 둔갑 금지)
 │   └─ ⑦ 다운로드·출처: repoFullName(GitHub)·trackId(스토어) + sources[] 출처 목록
 └─ section#stats: 카테고리별 신규수 / AI 비중 / 릴리즈 주기 / 스타 속도 (SVG 바닐라 차트)
-폰(≤600px) 1열·버튼·칩 최소 44px 터치 영역
+ 폰(≤600px) 1열·버튼·칩 최소 44px 터치 영역
+
+### 3-1. 모바일 헤더 규칙 (v1.7)
+- `header-content`(로고바, 높이 ≤56px)만 sticky, `div#filterPanel(탭+칩)`은 static이라 스크롤 시 밀려 올라감.
+- 모바일 기본 접힘 + `☰ 필터` 토글(`aria-expanded`)로 펼침. 데스크탑(>640px)은 토글 숨김·항상 펼침.
+- 칩·탭은 1줄 가로스크롤(`nowrap+overflow-x:auto`), 전부 `min-height:44px`. `body{overflow-x:hidden}`.
+- 상세 모달은 모바일 bottom-sheet (`100vw·92dvh·상단 radius 16px`).
 ```
 
 ## 4. 웹 시각 규칙

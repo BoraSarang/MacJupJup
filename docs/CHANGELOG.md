@@ -2,6 +2,12 @@
 
 > 형식: `## [vX.Y.Z] - YYYY-MM-DD` · platform 태그 + error_code + perf/cache 영향 기록
 
+## [v2.4] - 2026-09-12
+
+- 포털(AND): 모바일 대응 — 로고바만 sticky + `☰ 필터` 접기식 패널(탭·라이선스·카테고리), 칩 1줄 가로스크롤, 터치 44px, 상세 모달 bottom-sheet, reduced-motion 대응 (신규 error_code 없음)
+- 단위 영향 없음(assets만) · lint Error 0 (Warning 102) · 빌드 그린 + S22 설치 확인
+- perf/cache 영향 없음 (CSS/JS 정적 변경, 추가 네트워크 없음)
+
 ## [v2.3] - 2026-09-10
 
 - 수집(AND): PH·HN·MMB 3종 제거 (버전 추적 불가) — 시드·팩토리·상수·크롤러·파서 테스트 삭제, 시작 시 purge+예약 취소
