@@ -60,6 +60,55 @@
 - [x] 포털: 아이콘 카드·한글 기본+원문 토글·풍부한 특징·알림 목록
 - [x] 단위 41/41·lint Error 0·S22 E2E + 문서
 
+## v1.2 발견망·상세표시·버전링크·알림시간 (PLAN_v1.2_discovery, 완료 2026-09-10)
+- [x] T-060 MAS 키워드 디스커버리(신규 소스, 24h): search 키워드 분할 + 시드 + 팩토리
+- [x] T-061 수동 시드 POST /api/apps/seed (trackId·이름)
+- [x] T-070 포털 ⑥⑦ 분리: 홈페이지·Repo/스토어·출처 3단 렌더
+- [x] T-071 MMB guessRepo 확장 + 플레이스홀더 중복 병합 + 테스트
+- [x] T-072 GitHub homepage 빈값 규칙 고정(테스트)
+- [x] T-073 ④기능→④세부설명 분리
+- [x] T-080 버전 릴리즈페이지 링크(DB v2→v3: version_history.sourceUrl + API + 포털)
+- [x] T-090 알림 시작→완료·소요 표시(네이티브 + 포털)
+- [x] T-100 번역 소스언어 Auto(중·일·러): ML Kit 언어감지 + gtx sl=auto + needsTranslation 게이트
+- [x] T-099 빌드·단위 45/45·lint Error 0·S22 실측 검증 + CHANGELOG·세션 로그
+
+## v1.3 Setapp 제거·포털 동작·수집그래프·인사이트 (PLAN_v1.3_portal, 완료 2026-09-10)
+- [x] T-110 Setapp 완전 제거(코드+시작시 purge: 매핑 391·앱 381·로그) + 소스 9개
+- [x] T-111 뷰별 메뉴 동작: reloadCurrentView + 와치리스트 필터 연동 + 통계 칩 숨김·기간 선택
+- [x] T-112 일별 수집량 API(collectByDay) + 그래프 + 인사이트 API·카드
+- [x] T-119 빌드·단위 45/45·lint Error 0·S22 실측 + 문서
+
+## v2.0 감사 미처리분 (완료 2026-09-10)
+- [x] T-120 서버 JSON 헬퍼 + seed 백그라운드·상태 + 재시작 백그라운드화
+- [x] T-121 DB 싱글턴 정리 + 파괴 폴백 백업 + 인덱스 v4
+- [x] T-122 포털 알림페이징·키보드·aria
+- [x] T-129 빌드·단위 54/54·lint Error 0·S22 실측 + 문서
+
+## v1.4 상세 표시·번역 개행·Watchlist 탭 분리 (PLAN_v1.4_display-watchlist, 진행 중)
+- [x] T-130 포털 소개 원문보기 토글 수정 (data-kotext + 전문 토글)
+- [x] T-131 번역 줄 단위 분할 (개행 보존) + 개행 소실 행 재번역
+- [x] T-132 Watchlist 탭 분리 (업데이트=prevVersion / 전체 버전앱) + 버전 trim 정규화
+- [x] T-139 S22 wipe·재설치·재수집 + 번역 즉시 실행 — T-149 포털 눈확인만 잔여
+
+## v1.6 수집처 정리 PH·HN·MMB 제거 (PLAN_v1.6_prune-sources, 진행 중)
+- [x] T-160 크롤러·시드·상수·팩토리·placeholder 제거
+- [x] T-161 시작 시 purge 3종 + 예약 취소
+- [x] T-169 S22 wipe·재설치·재수집 (3508건) + 번역 즉시 실행 — 포털 눈확인만 잔여
+
+## v1.5 마크다운 렌더링 (PLAN_v1.5_markdown, 진행 중)
+- [x] T-140 수집 cleanReadme 마크다운 보존·살균
+- [x] T-141 번역 마크다운 보호 (코드·링크 URL 미번역)
+- [x] T-142 포털 md 렌더러 + 카드 strip + 토글 재렌더 + CSS
+- [x] T-143 HTML 잔재 제거 (포털 전체 stripHtml + 릴리즈노트 살균)
+- [x] T-150 번역 처리율 상향 (주기 6h→3h·회당 30→100건·REPLACE 교체) + 포털 수동 번역 버튼
+- [ ] T-149 포털 눈확인 (마크다운 렌더·토글·Watchlist 탭·🌐 버튼)
+
+## v1.7 웹 포털 모바일 대응 (PLAN_v1.7_mobile, 진행 중)
+- [x] T-170 헤더 컴팩트: filterPanel 구조 + ☰ 필터 토글 (index.html/app.js)
+- [x] T-171 모바일 CSS 640px: sticky 상단바만 + 칩 1줄 스크롤 + 44px 터치 + 모달 시트 (style.css)
+- [x] T-172 reduced-motion·aria-expanded·수평넘침 차단 + 데스크탑 회귀 없음
+- [ ] T-179 S22 실기 포털 눈확인 (접힘 기본·펼침·탭·칩스크롤·모달시트) + 세션 로그
+
 ## 완료 기준 (DoD 요약)
 
 - [x] lint Error 0, 단위/UI 테스트 통과

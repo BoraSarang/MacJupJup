@@ -7,7 +7,7 @@ import androidx.room.PrimaryKey
 /** 수집 이력/에러 로그. 디버그 로그 화면과 /api 소스 상태의 근거 */
 @Entity(
     tableName = "crawl_logs",
-    indices = [Index("sourceId"), Index("startedAt")],
+    indices = [Index("sourceId"), Index("startedAt"), Index(value = ["startedAt", "sourceId"])],
 )
 data class CrawlLog(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

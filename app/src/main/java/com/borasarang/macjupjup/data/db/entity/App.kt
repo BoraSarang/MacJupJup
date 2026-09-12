@@ -18,6 +18,9 @@ import androidx.room.PrimaryKey
         Index("repoFullName"),
         Index("lastUpdatedAt"),
         Index("isNew"),
+        Index("tags"),
+        Index("firstSeenAt"),
+        Index(value = ["license", "category", "lastUpdatedAt"]),
     ],
 )
 data class App(

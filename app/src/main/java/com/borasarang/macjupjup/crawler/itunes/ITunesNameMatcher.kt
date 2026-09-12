@@ -3,7 +3,7 @@ package com.borasarang.macjupjup.crawler.itunes
 import com.borasarang.macjupjup.crawler.AppDraft
 import com.borasarang.macjupjup.crawler.AppSourceMappingHelper
 import com.borasarang.macjupjup.crawler.BaseCrawler
-import com.borasarang.macjupjup.crawler.github.str
+import com.borasarang.macjupjup.crawler.str
 import com.borasarang.macjupjup.data.db.MacDatabase
 import com.borasarang.macjupjup.data.db.entity.App
 import com.borasarang.macjupjup.data.db.entity.CrawlSource
@@ -12,11 +12,10 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import java.net.URLEncoder
 
 /**
  * iTunes 이름 대조 매칭 (US, 키 불필요, 주 1회).
- * trackId·repo가 없는 앱(Setapp·PH·HN)을 search로 대조해 trackId를 부여.
+ * trackId·repo가 없는 앱을 search로 대조해 trackId를 부여.
  * 엄격 규칙: 이름 정규화 완전일치 + 개발사명 포함 일치. 미달은 그대로 둠.
  * 매칭 후 다음 lookup 폴링부터 전체 상세 자동 보완.
  */
@@ -39,9 +38,7 @@ class ITunesNameMatcher(
         var matched = 0
         for (app in targets) {
             try {
-                val url = "https://itunes.apple.com/search" +
-                    "?term=${URLEncoder.encode(app.name, "UTF-8")}" +
-                    "&country=us&entity=macSoftware&limit=5"
+                val url = itunesSearchUrl(app.name)
                 val body = fetchGet(url)
                 val results = parseSearch(body)
                 val hit = results.firstOrNull { isStrictMatch(app.name, app.developer, it) }
@@ -81,7 +78,7 @@ class ITunesNameMatcher(
     internal fun parseSearch(body: String): List<SearchHit> {        val arr = try {
             Json.parseToJsonElement(body).jsonObject["results"]?.jsonArray ?: return emptyList()
         } catch (_: Exception) {
-            throw IllegalStateException("iTunes Search 파싱 실패 (E-AND-CRAWL-0201)")
+            parseFail("iTunes Search")
         }
         return arr.mapNotNull { el ->
             try {
@@ -101,13 +98,16 @@ class ITunesNameMatcher(
     }
 
     companion object {
+        /** MergeUtils 단일 진실에 위임 (R1-11) */
         fun normalize(s: String): String =
-            s.lowercase().replace("[^a-z0-9가-힣]".toRegex(), "")
+            com.borasarang.macjupjup.util.MergeUtils.normalizeName(s)
 
-        /** 수집원 표기 개발사 (Setapp·HN·PH) — 실제 개발사 아님 */
+        /** 수집원 표기 개발사 — 실제 개발사 아님 (PH·HN·MMB 제거 후 잔재 행 매칭용으로 유지).
+         *  신규 수집은 6종이므로 해당 표기는 더 이상 생성되지 않음. */
         fun isPlaceholderDeveloper(developer: String): Boolean {
             val dev = normalize(developer)
-            return dev == "setapp" || dev.startsWith("hn") || dev == "producthunt"
+            return dev == "setapp" || dev.startsWith("hn") || dev == "producthunt" ||
+                dev == "macmenubar"
         }
 
         /** 엄격 매칭: 이름 정규화 완전일치 + 개발사 포함 일치(양방향) */

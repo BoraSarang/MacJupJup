@@ -3,7 +3,7 @@ package com.borasarang.macjupjup.crawler.itunes
 import com.borasarang.macjupjup.crawler.AppDraft
 import com.borasarang.macjupjup.crawler.AppSourceMappingHelper
 import com.borasarang.macjupjup.crawler.BaseCrawler
-import com.borasarang.macjupjup.crawler.github.str
+import com.borasarang.macjupjup.crawler.str
 import com.borasarang.macjupjup.data.db.MacDatabase
 import com.borasarang.macjupjup.data.db.entity.App
 import com.borasarang.macjupjup.data.db.entity.CrawlSource
@@ -44,13 +44,15 @@ class ITunesLookupPoller(
             val ids = chunk.mapNotNull { it.trackId }.joinToString(",")
             if (ids.isBlank()) continue
             try {
-                val body = fetchGet("https://itunes.apple.com/lookup?id=$ids&country=us&entity=macSoftware")
+                val body = fetchGet(itunesLookupUrl(ids))
                 val results = parseLookup(body)
                 val byId = chunk.associateBy { it.trackId }
                 for (r in results) {
                     val app = byId[r.trackId] ?: continue
                     val now = System.currentTimeMillis()
-                    val versionChanged = r.version != null && app.version != null && r.version != app.version
+                    // T-132: 공백 차이 버전 오판 방지 (정규화 비교)
+                    val versionChanged = r.version != null && app.version != null &&
+                        !com.borasarang.macjupjup.util.MergeUtils.sameVersion(r.version, app.version)
                     val needsEnrich = app.screenshotUrls.isNullOrBlank() && !r.screenshotUrls.isNullOrEmpty() ||
                         app.averageRating == null && r.averageRating != null ||
                         app.descriptionSnippet.isNullOrBlank() && !r.description.isNullOrBlank() ||
@@ -74,7 +76,7 @@ class ITunesLookupPoller(
                             fileSize = app.fileSize ?: r.fileSize,
                             minOs = app.minOs ?: r.minOs,
                             contentRating = app.contentRating ?: r.contentRating,
-                            category = if (app.sourceId == "chart_rss" || app.sourceId == "setapp_seed") {
+                            category = if (app.sourceId == com.borasarang.macjupjup.util.Constants.SOURCE_CHART_RSS) {
                                 app.category
                             } else {
                                 r.appleCategory?.let { AppleCategoryMap.map(it) } ?: app.category
@@ -127,7 +129,7 @@ class ITunesLookupPoller(
         val arr = try {
             Json.parseToJsonElement(body).jsonObject["results"]?.jsonArray ?: return emptyList()
         } catch (_: Exception) {
-            throw IllegalStateException("iTunes Lookup 파싱 실패 (E-AND-CRAWL-0201)")
+            parseFail("iTunes Lookup")
         }
         return arr.mapNotNull { el ->
             try {

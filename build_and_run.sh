@@ -32,6 +32,7 @@ case "$CMD" in
   test)
     if [ "$SCOPE" = "full" ]; then
         echo "🧪 전체 테스트 (unit + connected)…"
+        echo "⚠️  connected 테스트는 기기 앱을 재설치해 DB가 초기화됩니다 (재수집으로 복구)"
         ./gradlew test connectedAndroidTest 2>&1 | tail -8
     else
         echo "🧪 단위 테스트…"

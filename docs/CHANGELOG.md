@@ -2,6 +2,97 @@
 
 > 형식: `## [vX.Y.Z] - YYYY-MM-DD` · platform 태그 + error_code + perf/cache 영향 기록
 
+## [v2.4] - 2026-09-12
+
+- 포털(AND): 모바일 대응 — 로고바만 sticky + `☰ 필터` 접기식 패널(탭·라이선스·카테고리), 칩 1줄 가로스크롤, 터치 44px, 상세 모달 bottom-sheet, reduced-motion 대응 (신규 error_code 없음)
+- 단위 영향 없음(assets만) · lint Error 0 (Warning 102) · 빌드 그린 + S22 설치 확인
+- perf/cache 영향 없음 (CSS/JS 정적 변경, 추가 네트워크 없음)
+
+## [v2.3] - 2026-09-10
+
+- 수집(AND): PH·HN·MMB 3종 제거 (버전 추적 불가) — 시드·팩토리·상수·크롤러·파서 테스트 삭제, 시작 시 purge+예약 취소
+- 포털(AND): HTML 잔재 제거 — 상세·히스토리 전체 stripHtml, `a < b` 평문 보존 (신규 error_code 없음)
+- 수집(AND): GitHub 릴리즈노트 살균 (`cleanNotes`, 마크다운 유지)
+- 단위 57/57 · lint Error 0 · node 렌더 검증 (외래 태그 0건)
+
+## [v2.2] - 2026-09-10
+
+- 번역(AND): 처리율 상향 — 주기 6h→3h·회당 30→100건 (800건/일, 적체 3475건 약 4일) + 기존 설치분 REPLACE 교체
+- 포털(AND): 헤더 🌐 번역 버튼 — `POST /api/translate` 수동 즉시 실행 (적체 해소용)
+- 단위 61/61 · lint Error 0 · 배터리 영향: 하루 최대 8회×100건 (제약: 네트워크 연결+배터리 정상 시만)
+
+## [v2.1] - 2026-09-10
+
+- 포털(AND): 소개 원문보기 토글 수정 — `data-kotext` 누락으로 무반응이던 버그, 발췌↔발췌 전문 토글로 일관화
+- 번역(AND): 줄 단위 분할 번역으로 개행 보존 (Time Timer 한 줄 표시 대응) + 개행 소실 행 자동 재번역
+- Watchlist(AND): 탭 분리 — 업데이트(실제 bump, `prevVersion` 있음, 기본) / 전체 버전앱 + 문구 정정
+- 버전(AND): `JsonSafe.str` trim + `MergeUtils.sameVersion` 단일 진실 — 공백 차이 오판 방지 (신규 error_code 없음)
+- 단위 56/56 · lint Error 0 · perf/cache 영향 없음 (번역 호출은 여러 줄 앱에 한해 증가)
+
+## [v2.0] - 2026-09-10
+
+- 서버: JSON 헬퍼(receive/pathId/putIfNotNull) 전 라우트 적용 + seed 백그라운드·상태 API
+- 서버: 포트변경 재시작 백그라운드화 + 에셋 IO 격리·로그
+- DB: 싱글턴 단일화 + 파괴 폴백 전 백업 + 인덱스 v4 마이그레이션(데이터 보존 확인)
+- 포털: 알림 페이지네이션 + 카드 키보드 진입 + aria-live
+- 단위 54/54 · lint Error 0 · S22 실측
+- 주의: connected 테스트는 기기 DB 초기화 (build_and_run.sh 경고 추가)
+
+## [v1.9] - 2026-09-10
+
+- 버그사냥: sync 무효ID 404 + 알림 재조회 50건 상한 + PH 폐쇄피드 2종 제거
+- 단위 54/54 · lint Error 0 · 전수집 S22 실측(에러 0)
+
+## [v1.8] - 2026-09-10
+
+- isNew 정책 확정: 첫 발견 7일 경과 시 NEW 자동 해제(시작·보관정리 시) + 버전 bump 즉시 해제
+- 단위 54/54 · connected 포함 full 그린 · lint Error 0 · S22 실측
+- 주의: 현 환경 gtx 차단으로 번역 저류 중. 재설치 시 기기 DB 초기화됨(원인 조사 중)
+
+## [v1.7] - 2026-09-10
+
+- 리팩토링 R1-3: 크롤러 순회 템플릿(crawlEach) + 5종 이관 + 미사용 import 정리
+- P0-3: 동명이앱 다수 후보 병합 중단 + 경고 로그
+- 테스트: DAO connected 테스트 5종(S22 실DB) — UNIQUE 위반 테스트 결함 2건 수정
+- 단위 53/53 · connected 포함 full 그린 · lint Error 0
+- 주의: connected 테스트 실행 시 앱 재설치로 기기 DB 초기화됨 (재수집으로 복구)
+
+## [v1.6] - 2026-09-10
+
+- 리팩토링 B3: 일일요약 24h 주기화 + 와치리스트 서버필터(`bumped`)·페이징 + 타임라인 race 가드
+- 리팩토링 B4: GitHub헤더·JsonSafe·parseFail·정규화·URL·제목/키워드 공용화 + postForm/dbl/별칭 삭제
+- 리팩토링 B5: CommonCrawl·Sibling·정규화 테스트 (52/52)
+- 단위 52/52 · lint Error 0 · S22 실측
+
+## [v1.5] - 2026-09-10
+
+- 리팩토링 P0-2·P1-1: saveApps 트랜잭션 원자화 + 배치 일괄 조회 + list 매핑 N+1 제거
+- 소스별 워커 상호배제(SourceLocks) + 즉시수집 KEEP(연타 취소 방지) + 취소 로그
+- 단위 45/45 · lint Error 0 · S22 실측(연타 1회 실행·데이터 보존)
+
+## [v1.4] - 2026-09-10
+
+- 리팩토링 P0-1·4·5: 번역 부분업데이트(COALESCE) + purge·cleanup 트랜잭션 + 버전이력·매핑 동반 삭제
+- 저장 실패 에러코드 E-AND-DB-0402 부여
+- 단위 45/45 · lint Error 0 · S22 실측(데이터 보존·워커 정상)
+
+## [v1.3] - 2026-09-10
+
+- Setapp 수집처 완전 제거(코드 삭제 + 시작 시 purge: 매핑 391·앱 381·로그) → 소스 9개
+- 포털: 뷰별 메뉴 동작 수정(와치리스트 필터 연동, 통계 기간 선택 7/14/30일)
+- 통계: 일별 수집량 그래프(`/api/stats/collect`) + 인사이트 카드(`/api/stats/insights`)
+- 단위 45/45 · lint Error 0 · S22 실측
+
+## [v1.2] - 2026-09-10
+
+- 발견망: MAS 키워드 디스커버리 10번째 소스(24 키워드·24h) + 수동 시드 `POST /api/apps/seed`
+- 상세표시: ⑥홈·Repo·스토어·출처 3단 분리 + ④세부설명(① 중복 해소) + 버전별 릴리즈 링크
+- DB v3: `version_history.sourceUrl` (GitHub 릴리즈 페이지 / MAS 현재 페이지)
+- MMB `github.com` repo 인식 + 수집원표기(MMB 포함) 중복 병합 + 이름대조 폴백 확대
+- 번역 Auto: ML Kit 언어감지 + gtx `sl=auto` + `needsTranslation` (중·일·러 포괄)
+- 알림: 수집 시작→완료·소요 표시 (네이티브 + 포털)
+- 단위 45/45 · lint Error 0 · S22 실측 (MAS 1829건·SoundPaste 시드·Lyrimuse 홈버튼·버전링크 확인)
+
 ## [v1.1] - 2026-09-09
 
 - 정보 보강: DB v2 11컬럼 + lookup 전체상세 + GitHub 신호 + README + Setapp 상세

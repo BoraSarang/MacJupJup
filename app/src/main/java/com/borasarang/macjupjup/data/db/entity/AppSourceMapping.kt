@@ -7,7 +7,7 @@ import androidx.room.Index
 @Entity(
     tableName = "app_sources",
     primaryKeys = ["appId", "sourceName"],
-    indices = [Index("appId")],
+    indices = [Index("appId"), Index("sourceName")],
 )
 data class AppSourceMapping(
     val appId: String,

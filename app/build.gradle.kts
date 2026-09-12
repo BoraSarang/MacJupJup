@@ -78,6 +78,7 @@ dependencies {
     implementation(libs.jsoup)
     implementation(libs.timber)
     implementation(libs.mlkit.translate)
+    implementation(libs.mlkit.language.identification)
 
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)

@@ -17,4 +17,6 @@ data class VersionHistory(
     val notesSummary: String?,
     /** 버전 감지 출처 소스 ID */
     val source: String?,
+    /** T-080: 해당 버전 링크 (GitHub 릴리즈 페이지 / MAS 스토어 현재 페이지). 구버전 행은 null */
+    val sourceUrl: String?,
 )

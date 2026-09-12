@@ -44,7 +44,29 @@ class CrawlWorker(
             return Result.retry()
         }
 
+        // P0-2: 동일 소스 중복 실행 방지 (주기+즉시 겹침 시 스킵).
+        // 시작 로그는 선점 성공 후에만 찍는다 (REPLACE 취소된 워커와 구분).
+        if (!SourceLocks.tryAcquire(sourceId)) {
+            DebugLogger.w("수집", "워커 스킵(이미 실행 중) source=${source.name}")
+            return Result.success()
+        }
         DebugLogger.i("수집", "워커 시작 source=${source.name}")
+        try {
+            return runCrawl(app, sourceId, source)
+        } catch (e: Exception) {
+            // REPLACE 취소 등 비정상 종료도 식별되게 기록
+            DebugLogger.w("수집", "워커 종료(${e.javaClass.simpleName}) source=${source.name}")
+            throw e
+        } finally {
+            SourceLocks.release(sourceId)
+        }
+    }
+
+    private suspend fun runCrawl(
+        app: MacJupJupApplication,
+        sourceId: String,
+        source: com.borasarang.macjupjup.data.db.entity.CrawlSource,
+    ): Result {
         app.sourceRepository.markRunning(sourceId)
         setForeground(createForegroundInfo(source.name))
         val startedAt = System.currentTimeMillis()
@@ -73,11 +95,11 @@ class CrawlWorker(
                         "워커 완료 source=${source.name} found=${drafts.size} " +
                             "new=${saved.created} updated=${saved.updated}",
                     )
-                    // 알림 생성 — 저장된 id 기준 실제 조회
+                    // 알림 생성 — 저장된 id 기준 실제 조회 (상위 50건만, 대량 신규 시 N+1 방지)
                     val newApps = if (saved.createdIds.isEmpty()) {
                         emptyList()
                     } else {
-                        saved.createdIds.mapNotNull { app.database.appDao().getById(it) }
+                        saved.createdIds.take(50).mapNotNull { app.database.appDao().getById(it) }
                     }
                     if (newApps.isNotEmpty()) {
                         app.notificationService.createNewAppsNotification(newApps)
@@ -128,10 +150,10 @@ class CrawlWorker(
                 val current = app.database.appDao().getById(a.id) ?: continue
                 val descKo = current.descriptionSnippet
                     ?.takeIf { current.descriptionKo == null }
-                    ?.let { com.borasarang.macjupjup.util.MacTranslator.translateEnToKo(it) }
+                    ?.let { com.borasarang.macjupjup.util.MacTranslator.translateAutoToKo(it) }
                 val notesKo = (current.releaseNotes ?: current.releaseNotesSummary)
                     ?.takeIf { current.releaseNotesKo == null }
-                    ?.let { com.borasarang.macjupjup.util.MacTranslator.translateEnToKo(it) }
+                    ?.let { com.borasarang.macjupjup.util.MacTranslator.translateAutoToKo(it) }
                 if (descKo != null || notesKo != null) {
                     app.database.appDao().updateKo(a.id, descKo, notesKo)
                     done++

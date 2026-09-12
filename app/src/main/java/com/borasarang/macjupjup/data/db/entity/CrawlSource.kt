@@ -12,7 +12,7 @@ import androidx.room.PrimaryKey
 data class CrawlSource(
     @PrimaryKey val id: String,
     val name: String,
-    /** GITHUB_SEARCH / GITHUB_RELEASES / PH_FEED / HN_SHOW / SETAPP_SEED / CHART_RSS / ITUNES_LOOKUP */
+    /** GITHUB_SEARCH / GITHUB_RELEASES / CHART_RSS / ITUNES_LOOKUP / NAME_MATCH / MAS_DISCOVERY */
     val type: String,
     val baseUrl: String,
     val enabled: Boolean,

@@ -4,7 +4,6 @@ import com.borasarang.macjupjup.crawler.AppDraft
 import com.borasarang.macjupjup.crawler.BaseCrawler
 import com.borasarang.macjupjup.data.db.entity.CrawlSource
 import com.borasarang.macjupjup.util.AppleCategoryMap
-import com.borasarang.macjupjup.util.DebugLogger
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.jsonArray
@@ -24,19 +23,8 @@ class ChartRssCrawler(
     data class ChartFeed(val name: String, val url: String)
 
     override suspend fun crawl(): Result<List<AppDraft>> = runCatching {
-        val drafts = mutableListOf<AppDraft>()
-        for (feed in feeds) {
-            try {
-                val body = fetchGet(feed.url)
-                drafts += parseChart(body, feed.name)
-            } catch (e: Exception) {
-                DebugLogger.w("수집", "차트 피드 스킵 ${feed.name}: ${e.message}")
-            }
-            politenessDelay()
-        }
-        val seen = mutableSetOf<String>()
-        drafts.filter { seen.add(it.app.id) }.also {
-            DebugLogger.i("수집", "차트 RSS 완료 feeds=${feeds.size} found=${drafts.size} unique=${it.size}")
+        crawlEach(feeds, "차트 RSS") { feed ->
+            parseChart(fetchGet(feed.url), feed.name)
         }
     }
 
@@ -45,7 +33,7 @@ class ChartRssCrawler(
             Json.parseToJsonElement(body).jsonObject["feed"]
                 ?.jsonObject?.get("entry")?.jsonArray ?: return emptyList()
         } catch (_: Exception) {
-            throw IllegalStateException("차트 RSS 파싱 실패 (E-AND-CRAWL-0201)")
+            parseFail("차트 RSS")
         }
         return entries.mapNotNull { el ->
             try {
@@ -92,7 +80,7 @@ class ChartRssCrawler(
 
     companion object {
         // Apple 측에서 유료/매출 Mac 차트는 빈 배열 반환(2026-09 확인) — 무료만 수집.
-        // 유료 커버리지는 Setapp 시드(PAID 기본) + lookup 보완으로 확보.
+        // 유료 커버리지는 MAS 키워드 발견 + lookup 보완으로 확보.
         val DEFAULT_FEEDS = listOf(
             ChartFeed("free", "https://itunes.apple.com/us/rss/topfreemacapps/limit=100/json"),
         )

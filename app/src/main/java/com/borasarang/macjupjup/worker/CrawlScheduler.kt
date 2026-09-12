@@ -83,7 +83,9 @@ class CrawlScheduler(private val context: Context) {
                 .build()
             wm.enqueueUniqueWork(
                 "crawl_once_$id",
-                ExistingWorkPolicy.REPLACE,
+                // P0-2: REPLACE는 실행 중 워커까지 취소해 수집이 증발하므로 KEEP.
+                // 중복 실행은 CrawlWorker의 SourceLocks가 스킵한다.
+                ExistingWorkPolicy.KEEP,
                 req,
             )
         }
@@ -94,32 +96,35 @@ class CrawlScheduler(private val context: Context) {
         WorkManager.getInstance(context).cancelAllWorkByTag(TAG_CRAWL)
     }
 
-    /** 오전 9시 일일 요약 예약 (M5) */    fun scheduleDailySummary() {
+    /** 오전 9시 일일 요약 예약 (24h 주기, KEEP — 1회성이던 문제 수정) */
+    fun scheduleDailySummary() {
         val delayMs = com.borasarang.macjupjup.util.TimeUtils.millisUntilNextHour(9)
-        val req = OneTimeWorkRequestBuilder<DailySummaryWorker>()
+        val req = PeriodicWorkRequestBuilder<DailySummaryWorker>(24, TimeUnit.HOURS)
             .setInitialDelay(delayMs, TimeUnit.MILLISECONDS)
             .addTag(TAG_SUMMARY)
             .build()
-        WorkManager.getInstance(context).enqueueUniqueWork(
-            "daily_summary",
-            ExistingWorkPolicy.REPLACE,
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+            // 기존 1회성 예약과 별도 이름 (충돌 방지, 구 예약은 1회 실행 후 소멸)
+            "daily_summary_periodic",
+            ExistingPeriodicWorkPolicy.KEEP,
             req,
         )
-        DebugLogger.i("스케줄", "일일 요약 예약 (${delayMs / 3600000}시간 후)")
+        DebugLogger.i("스케줄", "일일 요약 예약 24h 주기 (${delayMs / 3600000}시간 후 첫 실행)")
     }
 
-    /** 번역 워커 6시간 주기 예약 (수집과 독립 생명주기) */
+    /** 번역 워커 3시간 주기 예약 (T-150: 적체 해소용 단축, 수집과 독립 생명주기) */
     fun scheduleTranslate() {
-        val req = PeriodicWorkRequestBuilder<TranslateWorker>(6, TimeUnit.HOURS)
+        val req = PeriodicWorkRequestBuilder<TranslateWorker>(3, TimeUnit.HOURS)
             .setConstraints(constraints())
             .addTag(TAG_TRANSLATE)
             .build()
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(
             "translate_ko",
-            ExistingPeriodicWorkPolicy.KEEP,
+            // T-150: REPLACE — 기존 설치분의 6h 예약을 3h로 교체 (KEEP이면 구 주기 유지됨)
+            ExistingPeriodicWorkPolicy.REPLACE,
             req,
         )
-        DebugLogger.i("스케줄", "번역 워커 예약 6시간마다")
+        DebugLogger.i("스케줄", "번역 워커 예약 3시간마다")
     }
 
     /** 번역 즉시 실행 (포털·설정에서 수동) */

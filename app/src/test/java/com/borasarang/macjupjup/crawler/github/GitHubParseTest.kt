@@ -43,6 +43,21 @@ class GitHubParseTest {
     }
 
     @Test
+    fun `homepage_빈값은null_실값유지_T072`() {
+        val drafts = GitHubSearchCrawler(source).parseRepos(searchJson)
+        // homepage "" / null → repo URL로 둔갑 금지, 공란 유지
+        assertNull(drafts[0].app.homepageUrl)
+        assertNull(drafts[1].app.homepageUrl)
+        val withHome = GitHubSearchCrawler(source).parseRepos(
+            """{"total_count":1,"items":[{"full_name":"aliyar/FetchBar","name":"FetchBar",
+            "owner":{"login":"aliyar"},"description":"d","stargazers_count":10,
+            "html_url":"https://github.com/aliyar/FetchBar",
+            "homepage":"https://fetchbar.greatpixels.com/","default_branch":"main"}]}""",
+        )
+        assertEquals("https://fetchbar.greatpixels.com/", withHome[0].app.homepageUrl)
+    }
+
+    @Test
     fun `releases_최신태그`() {
         val body = """[{"tag_name":"v1.2.0","draft":false,
           "body":"새 기능 추가","html_url":"https://github.com/o/r/releases/tag/v1.2.0"},
@@ -57,6 +72,21 @@ class GitHubParseTest {
     fun `releases_없으면_null`() {
         val latest = GitHubReleasesCrawler(source, { emptyList() }).parseLatestRelease("[]")
         assertNull(latest)
+    }
+
+    @Test
+    fun `릴리즈노트_HTML살균_T143`() {
+        val crawler = GitHubReleasesCrawler(source, { emptyList() })
+        val cleaned = crawler.cleanNotes("## 변경\n\n<img src=\"x.png\">\n\n- <b>굵게</b> 수정\n\n<!-- hi -->\n\na < b 비교")
+        assertNotNull(cleaned)
+        assertTrue(!cleaned!!.contains("<img"))
+        assertTrue(!cleaned.contains("<b>"))
+        assertTrue(!cleaned.contains("<!--"))
+        assertTrue(cleaned.contains("## 변경"))
+        assertTrue(cleaned.contains("- 굵게 수정"))
+        assertTrue(cleaned.contains("a < b 비교"))
+        assertNull(crawler.cleanNotes("   "))
+        assertNull(crawler.cleanNotes(null))
     }
 
     @Test

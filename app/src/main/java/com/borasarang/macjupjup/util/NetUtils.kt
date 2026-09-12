@@ -80,6 +80,25 @@ object TimeUtils {
         return java.text.SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(java.util.Date(epochMillis))
     }
 
+    /** T-090: 절대 시각 (yyyy-MM-dd HH:mm, 기기 로컬 타임존) */
+    fun formatAbsolute(epochMillis: Long?): String {
+        if (epochMillis == null || epochMillis <= 0) return "없음"
+        return try {
+            java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.KOREA)
+                .format(java.util.Date(epochMillis))
+        } catch (_: Exception) {
+            "없음"
+        }
+    }
+
+    /** T-090: 소요 시간 (초→"N초"/"N분 N초") */
+    fun formatDuration(startedAt: Long?, finishedAt: Long?): String? {
+        if (startedAt == null || finishedAt == null || startedAt <= 0 || finishedAt < startedAt) {
+            return null
+        }
+        val secs = (finishedAt - startedAt) / 1000
+        return if (secs < 60) "소요 ${secs}초" else "소요 ${secs / 60}분 ${secs % 60}초"
+    }
     /** 수집 주기 선택지(분). WorkManager 최소 주기 15분. 월간(43200) 포함 */
     val INTERVAL_OPTIONS_MINUTES = listOf(60, 360, 720, 1440, 10080, 43200)
     const val MIN_INTERVAL_MINUTES = 15

@@ -3,6 +3,7 @@ package com.borasarang.macjupjup.crawler.github
 import com.borasarang.macjupjup.crawler.AppDraft
 import com.borasarang.macjupjup.crawler.AppSourceMappingHelper
 import com.borasarang.macjupjup.crawler.BaseCrawler
+import com.borasarang.macjupjup.crawler.str
 import com.borasarang.macjupjup.data.db.MacDatabase
 import com.borasarang.macjupjup.data.db.entity.CrawlSource
 import com.borasarang.macjupjup.util.DebugLogger
@@ -31,11 +32,7 @@ class GitHubReleasesCrawler(
     ) : this(source, { db.appDao().getReposForReleaseCheck(maxRepos) }, token, maxRepos)
 
     override suspend fun crawl(): Result<List<AppDraft>> = runCatching {
-        val headers = buildMap {
-            put("Accept", "application/vnd.github+json")
-            put("X-GitHub-Api-Version", "2022-11-28")
-            if (token.isNotBlank()) put("Authorization", "Bearer $token")
-        }
+        val headers = githubHeaders(token)
         val targets = repoProvider().take(maxRepos)
         val drafts = mutableListOf<AppDraft>()
         var bumped = 0
@@ -47,13 +44,14 @@ class GitHubReleasesCrawler(
                     headers,
                 )
                 val latest = parseLatestRelease(body) ?: continue
-                if (latest.tag != null && latest.tag != app.version) {
+                if (latest.tag != null && !com.borasarang.macjupjup.util.MergeUtils.sameVersion(latest.tag, app.version)) {
                     val now = System.currentTimeMillis()
+                    val notes = cleanNotes(latest.notes)
                     val updated = app.copy(
                         version = latest.tag,
                         prevVersion = app.version,
-                        releaseNotesSummary = latest.notes?.take(500),
-                        releaseNotes = latest.notes?.take(2000) ?: app.releaseNotes,
+                        releaseNotesSummary = notes?.take(500),
+                        releaseNotes = notes?.take(2000) ?: app.releaseNotes,
                         lastUpdatedAt = now,
                         isNew = false,
                     )
@@ -82,11 +80,23 @@ class GitHubReleasesCrawler(
 
     data class LatestRelease(val tag: String?, val notes: String?, val url: String?)
 
+    /** 릴리즈노트 살균 (T-143): 날 HTML 태그·주석 제거, 마크다운 구조 유지, 과도 개행 정리 */
+    internal fun cleanNotes(raw: String?): String? {
+        if (raw.isNullOrBlank()) return null
+        var t = raw
+        t = t.replace(Regex("<!--[\\s\\S]*?-->"), "")
+        t = t.replace(Regex("</?[a-zA-Z][^>\\n]*>"), "")
+        t = t.replace(Regex("[ \\t]+"), " ")
+        t = t.replace(Regex("\\n{3,}"), "\n\n")
+        t = t.trim()
+        return t.ifBlank { null }
+    }
+
     internal fun parseLatestRelease(body: String): LatestRelease? {
         val arr = try {
             Json.parseToJsonElement(body).jsonArray
         } catch (_: Exception) {
-            throw IllegalStateException("GitHub Releases 응답 파싱 실패 (E-AND-CRAWL-0201)")
+            parseFail("GitHub Releases 응답")
         }
         if (arr.isEmpty()) return null
         val o = arr[0].jsonObject
