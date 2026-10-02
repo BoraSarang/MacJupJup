@@ -9,3 +9,5 @@ keystore.properties
 *.iml
 # OS
 .DS_Store
+# 에이전트 세션 로그 — 로컬 전용 (커밋 금지)
+.agent/
